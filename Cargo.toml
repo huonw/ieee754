@@ -2,3 +2,13 @@
 name = "ieee754"
 version = "0.1.0"
 authors = ["Huon Wilson <dbau.pp@gmail.com>"]
+
+homepage = "https://github.com/huonw/ieee754"
+repository = "https://github.com/huonw/ieee754"
+documentation = "http://huonw.github.io/ieee754"
+license = "MIT/Apache-2.0"
+keywords = ["floating-point", "mathematics", "numerics"]
+
+description = """
+Low-level manipulations of IEEE754 floating-point numbers.
+"""
