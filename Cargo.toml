@@ -12,3 +12,6 @@ keywords = ["floating-point", "mathematics", "numerics"]
 description = """
 Low-level manipulations of IEEE754 floating-point numbers.
 """
+
+[features]
+unstable = []

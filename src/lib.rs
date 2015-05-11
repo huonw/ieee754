@@ -18,6 +18,10 @@
 //! // (inclusive).
 //! assert_eq!(1_f32.upto(1.0001).count(), 840);
 //! ```
+
+#![cfg_attr(all(test, feature = "unstable"), feature(test))]
+#[cfg(all(test, feature = "unstable"))] extern crate test;
+
 use std::mem;
 
 /// An iterator over floating point numbers.
@@ -215,5 +219,33 @@ mod tests {
         assert_eq!(f32::recompose(true, 0, 10).upto(f32::recompose(false, 0, 10)).count(),
                    21);
 
+    }
+}
+#[cfg(all(test, feature = "unstable"))]
+mod benches {
+    use test::{Bencher, black_box};
+    use super::Ieee754;
+
+    #[bench]
+    fn f32_iter_pos(b: &mut Bencher) {
+        let (_, expn, _) = 1_f32.decompose();
+        let end = f32::recompose(false, expn, 100);
+        b.iter(|| black_box(1_f32).upto(end).count())
+    }
+    #[bench]
+    fn f32_iter_over_zero(b: &mut Bencher) {
+        let x = f32::recompose(false, 0, 20);
+        b.iter(|| black_box(-x).upto(x).count())
+    }
+    #[bench]
+    fn f64_iter_pos(b: &mut Bencher) {
+        let (_, expn, _) = 1_f64.decompose();
+        let end = f64::recompose(false, expn, 100);
+        b.iter(|| black_box(1_f64).upto(end).count())
+    }
+    #[bench]
+    fn f64_iter_over_zero(b: &mut Bencher) {
+        let x = f64::recompose(false, 0, 20);
+        b.iter(|| black_box(-x).upto(x).count())
     }
 }
