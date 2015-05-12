@@ -24,7 +24,7 @@
 
 use std::mem;
 
-/// An iterator over floating point numbers.
+/// An iterator over floating point numbers, created by `Ieee754::upto`.
 pub struct Iter<T: Ieee754> {
     from: T,
     to: T,
@@ -64,6 +64,9 @@ impl<T: Ieee754> DoubleEndedIterator for Iter<T> {
 /// Types that are IEEE754 floating point numbers.
 pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// Iterate over each value of `Self` in `[self, lim]`.
+    ///
+    /// The returned iterator will include subnormal numbers, and will
+    /// only include one of `-0.0` and `0.0`.
     ///
     /// # Panics
     ///
