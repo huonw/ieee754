@@ -46,6 +46,32 @@ impl<T: Ieee754> Iterator for Iter<T> {
         self.from = y;
         return Some(x)
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        if self.done {
+            return (0, Some(0))
+        }
+
+        let high_pos = 8 * mem::size_of::<T>() - 1;
+        let high_mask = 1 << high_pos;
+
+        let from_ = self.from.bits().as_u64();
+        let (from, from_sign) = (from_ & !high_mask,
+                                 from_ & high_mask != 0);
+        let to_ = self.to.bits().as_u64();
+        let (to, to_sign) = (to_ & !high_mask,
+                             to_ & high_mask != 0);
+        let from = if from_sign { -(from as i64) } else { from as i64 };
+        let to = if to_sign { -(to as i64) } else { to as i64 };
+
+        let distance = (to - from + 1) as u64;
+        if distance <= std::usize::MAX as u64 {
+            let d = distance as usize;
+            (d, Some(d))
+        } else {
+            (std::usize::MAX, None)
+        }
+    }
 }
 impl<T: Ieee754> DoubleEndedIterator for Iter<T> {
     fn next_back(&mut self) -> Option<T> {
@@ -59,6 +85,16 @@ impl<T: Ieee754> DoubleEndedIterator for Iter<T> {
         self.to = y;
         return Some(x)
     }
+}
+
+pub trait Bits: Eq + PartialEq + PartialOrd + Ord + Copy {
+    fn as_u64(self) -> u64;
+}
+impl Bits for u32 {
+    fn as_u64(self) -> u64 { self as u64 }
+}
+impl Bits for u64 {
+    fn as_u64(self) -> u64 { self }
 }
 
 /// Types that are IEEE754 floating point numbers.
@@ -84,7 +120,7 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     fn upto(self, lim: Self) -> Iter<Self>;
 
     /// A type that represents the raw bits of `Self`.
-    type Bits: Eq + PartialEq + PartialOrd + Ord + Copy;
+    type Bits: Bits;
     /// A type large enough to store the true exponent of `Self`.
     type Exponent;
     /// A type large enough to store the raw exponent (i.e. with the bias).
@@ -461,6 +497,38 @@ macro_rules! mk_impl {
                 assert_eq!(f::NEG_INFINITY.upto(f::MIN).rev().collect::<Vec<_>>(),
                            &[f::MIN, f::NEG_INFINITY]);
             }
+
+            #[test]
+            fn upto_size_hint() {
+                let mut iter =
+                    $f::recompose(true, -$f::exponent_bias(), 10)
+                    .upto($f::recompose(false, -$f::exponent_bias(), 10));
+
+                assert_eq!(iter.size_hint(), (21, Some(21)));
+                for i in (0..21).rev() {
+                    assert!(iter.next().is_some());
+                    assert_eq!(iter.size_hint(), (i, Some(i)));
+                }
+                assert_eq!(iter.next(), None);
+                assert_eq!(iter.size_hint(), (0, Some(0)))
+            }
+
+            #[test]
+            fn upto_size_hint_rev() {
+                let mut iter =
+                    $f::recompose(true, -$f::exponent_bias(), 10)
+                    .upto($f::recompose(false, -$f::exponent_bias(), 10))
+                    .rev();
+
+                assert_eq!(iter.size_hint(), (21, Some(21)));
+                for i in (0..21).rev() {
+                    assert!(iter.next().is_some());
+                    assert_eq!(iter.size_hint(), (i, Some(i)));
+                }
+                assert_eq!(iter.next(), None);
+                assert_eq!(iter.size_hint(), (0, Some(0)))
+            }
+
             #[cfg(all(test, feature = "unstable"))]
             mod benches {
                 use test::{Bencher, black_box};
