@@ -84,6 +84,8 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     type Bits: Eq + PartialEq + PartialOrd + Ord + Copy;
     /// A type large enough to store the true exponent of `Self`.
     type Exponent;
+    /// A type large enough to store the raw exponent (i.e. with the bias).
+    type RawExponent;
     /// A type large enough to store the significand of `Self`.
     type Signif;
 
@@ -145,7 +147,8 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// Break `self` into the three constituent parts of an IEEE754 float.
     ///
     /// The exponent returned is the raw bits, use `exponent_bias` to
-    /// compute the offset required.
+    /// compute the offset required or use `decompose` to obtain this
+    /// in precomputed form.
     ///
     /// # Examples
     ///
@@ -154,14 +157,14 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// ```rust
     /// use ieee754::Ieee754;
     ///
-    /// assert_eq!(1_f32.decompose(), (false, 127, 0));
-    /// assert_eq!(1234.567_f32.decompose(), (false, 137, 0x1a5225));
+    /// assert_eq!(1_f32.decompose_raw(), (false, 127, 0));
+    /// assert_eq!(1234.567_f32.decompose_raw(), (false, 137, 0x1a5225));
     ///
-    /// assert_eq!((-0.525_f32).decompose(), (true, 126, 0x66666));
+    /// assert_eq!((-0.525_f32).decompose_raw(), (true, 126, 0x66666));
     ///
-    /// assert_eq!(std::f32::INFINITY.decompose(), (false, 255, 0));
+    /// assert_eq!(std::f32::INFINITY.decompose_raw(), (false, 255, 0));
     ///
-    /// let (sign, expn, signif) = std::f32::NAN.decompose();
+    /// let (sign, expn, signif) = std::f32::NAN.decompose_raw();
     /// assert_eq!((sign, expn), (false, 255));
     /// assert!(signif != 0);
     /// ```
@@ -171,23 +174,24 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// ```rust
     /// use ieee754::Ieee754;
     ///
-    /// assert_eq!(1_f64.decompose(), (false, 1023, 0));
-    /// assert_eq!(1234.567_f64.decompose(), (false, 1033, 0x34a449ba5e354));
+    /// assert_eq!(1_f64.decompose_raw(), (false, 1023, 0));
+    /// assert_eq!(1234.567_f64.decompose_raw(), (false, 1033, 0x34a449ba5e354));
     ///
-    /// assert_eq!((-0.525_f64).decompose(), (true, 1022, 0xcccc_cccc_cccd));
+    /// assert_eq!((-0.525_f64).decompose_raw(), (true, 1022, 0xcccc_cccc_cccd));
     ///
-    /// assert_eq!(std::f64::INFINITY.decompose(), (false, 2047, 0));
+    /// assert_eq!(std::f64::INFINITY.decompose_raw(), (false, 2047, 0));
     ///
-    /// let (sign, expn, signif) = std::f64::NAN.decompose();
+    /// let (sign, expn, signif) = std::f64::NAN.decompose_raw();
     /// assert_eq!((sign, expn), (false, 2047));
     /// assert!(signif != 0);
     /// ```
+    fn decompose_raw(self) -> (bool, Self::RawExponent, Self::Signif);
 
-    fn decompose(self) -> (bool, Self::Exponent, Self::Signif);
     /// Create a `Self` out of the three constituent parts of an IEEE754 float.
     ///
     /// The exponent should be the raw bits, use `exponent_bias` to
-    /// compute the offset required.
+    /// compute the offset required, or use `recompose` to feed in the
+    /// unbiased exponent.
     ///
     /// # Examples
     ///
@@ -196,13 +200,13 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// ```rust
     /// use ieee754::Ieee754;
     ///
-    /// assert_eq!(f32::recompose(false, 127, 0), 1.0);
-    /// assert_eq!(f32::recompose(false, 137, 0x1a5225), 1234.567);
-    /// assert_eq!(f32::recompose(true, 126, 0x66666), -0.525);
+    /// assert_eq!(f32::recompose_raw(false, 127, 0), 1.0);
+    /// assert_eq!(f32::recompose_raw(false, 137, 0x1a5225), 1234.567);
+    /// assert_eq!(f32::recompose_raw(true, 126, 0x66666), -0.525);
     ///
-    /// assert_eq!(f32::recompose(false, 255, 0), std::f32::INFINITY);
+    /// assert_eq!(f32::recompose_raw(false, 255, 0), std::f32::INFINITY);
     ///
-    /// assert!(f32::recompose(false, 255, 1).is_nan());
+    /// assert!(f32::recompose_raw(false, 255, 1).is_nan());
     /// ```
     ///
     /// Double precision:
@@ -210,13 +214,94 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// ```rust
     /// use ieee754::Ieee754;
     ///
-    /// assert_eq!(f64::recompose(false, 1023, 0), 1.0);
-    /// assert_eq!(f64::recompose(false, 1033, 0x34a449ba5e354), 1234.567);
-    /// assert_eq!(f64::recompose(true, 1022, 0xcccc_cccc_cccd), -0.525);
+    /// assert_eq!(f64::recompose_raw(false, 1023, 0), 1.0);
+    /// assert_eq!(f64::recompose_raw(false, 1033, 0x34a449ba5e354), 1234.567);
+    /// assert_eq!(f64::recompose_raw(true, 1022, 0xcccc_cccc_cccd), -0.525);
     ///
-    /// assert_eq!(f64::recompose(false, 2047, 0), std::f64::INFINITY);
+    /// assert_eq!(f64::recompose_raw(false, 2047, 0), std::f64::INFINITY);
     ///
-    /// assert!(f64::recompose(false, 2047, 1).is_nan());
+    /// assert!(f64::recompose_raw(false, 2047, 1).is_nan());
+    /// ```
+    fn recompose_raw(sign: bool, expn: Self::RawExponent, signif: Self::Signif) -> Self;
+
+    /// Break `self` into the three constituent parts of an IEEE754 float.
+    ///
+    /// The exponent returned is the true exponent, after accounting
+    /// for the bias it is stored with. The significand does not
+    /// include the implicit highest bit (if it exists), e.g. the
+    /// 24-bit for single precision.
+    ///
+    /// # Examples
+    ///
+    /// Single precision:
+    ///
+    /// ```rust
+    /// use ieee754::Ieee754;
+    ///
+    /// assert_eq!(1_f32.decompose(), (false, 0, 0));
+    /// assert_eq!(1234.567_f32.decompose(), (false, 10, 0x1a5225));
+    ///
+    /// assert_eq!((-0.525_f32).decompose(), (true, -1, 0x66666));
+    ///
+    /// assert_eq!(std::f32::INFINITY.decompose(), (false, 128, 0));
+    ///
+    /// let (sign, expn, signif) = std::f32::NAN.decompose();
+    /// assert_eq!((sign, expn), (false, 128));
+    /// assert!(signif != 0);
+    /// ```
+    ///
+    /// Double precision:
+    ///
+    /// ```rust
+    /// use ieee754::Ieee754;
+    ///
+    /// assert_eq!(1_f64.decompose(), (false, 0, 0));
+    /// assert_eq!(1234.567_f64.decompose(), (false, 10, 0x34a449ba5e354));
+    ///
+    /// assert_eq!((-0.525_f64).decompose(), (true, -1, 0xcccc_cccc_cccd));
+    ///
+    /// assert_eq!(std::f64::INFINITY.decompose(), (false, 1024, 0));
+    ///
+    /// let (sign, expn, signif) = std::f64::NAN.decompose();
+    /// assert_eq!((sign, expn), (false, 1024));
+    /// assert!(signif != 0);
+    /// ```
+    fn decompose(self) -> (bool, Self::Exponent, Self::Signif);
+
+    /// Create a `Self` out of the three constituent parts of an IEEE754 float.
+    ///
+    /// The exponent should be true exponent, not accounting for any
+    /// bias. The significand should not include the implicit highest
+    /// bit (if it exists), e.g. the 24-th bit for signle precision.
+    ///
+    /// # Examples
+    ///
+    /// Single precision:
+    ///
+    /// ```rust
+    /// use ieee754::Ieee754;
+    ///
+    /// assert_eq!(f32::recompose(false, 0, 0), 1.0);
+    /// assert_eq!(f32::recompose(false, 10, 0x1a5225), 1234.567);
+    /// assert_eq!(f32::recompose(true, -1, 0x66666), -0.525);
+    ///
+    /// assert_eq!(f32::recompose(false, 128, 0), std::f32::INFINITY);
+    ///
+    /// assert!(f32::recompose(false, 128, 1).is_nan());
+    /// ```
+    ///
+    /// Double precision:
+    ///
+    /// ```rust
+    /// use ieee754::Ieee754;
+    ///
+    /// assert_eq!(f64::recompose(false, 0, 0), 1.0);
+    /// assert_eq!(f64::recompose(false, 10, 0x34a449ba5e354), 1234.567);
+    /// assert_eq!(f64::recompose(true, -1, 0xcccc_cccc_cccd), -0.525);
+    ///
+    /// assert_eq!(f64::recompose(false, 1024, 0), std::f64::INFINITY);
+    ///
+    /// assert!(f64::recompose(false, 1024, 1).is_nan());
     /// ```
     fn recompose(sign: bool, expn: Self::Exponent, signif: Self::Signif) -> Self;
 }
@@ -233,11 +318,12 @@ macro_rules! unmask {
 }
 
 macro_rules! mk_impl {
-    ($f: ident, $bits: ty, $expn: ty, $signif: ty,
+    ($f: ident, $bits: ty, $expn: ty, $expn_raw: ty, $signif: ty,
      $expn_n: expr, $signif_n: expr) => {
         impl Ieee754 for $f {
             type Bits = $bits;
             type Exponent = $expn;
+            type RawExponent = $expn_raw;
             type Signif = $signif;
             #[inline]
             fn upto(self, lim: Self) -> Iter<Self> {
@@ -257,7 +343,7 @@ macro_rules! mk_impl {
             #[inline]
             fn next(self) -> Self {
                 let abs_mask = (!(0 as Self::Bits)) >> 1;
-                let (sign, _expn, _signif) = self.decompose();
+                let (sign, _expn, _signif) = self.decompose_raw();
                 let mut bits = self.bits();
                 if sign {
                     bits -= 1;
@@ -273,7 +359,7 @@ macro_rules! mk_impl {
             #[inline]
             fn prev(self) -> Self {
                 let abs_mask = (!(0 as Self::Bits)) >> 1;
-                let (sign, _expn, _signif) = self.decompose();
+                let (sign, _expn, _signif) = self.decompose_raw();
                 let mut bits = self.bits();
                 if sign {
                      bits += 1;
@@ -299,20 +385,33 @@ macro_rules! mk_impl {
                 unsafe {mem::transmute(bits)}
             }
             #[inline]
-            fn decompose(self) -> (bool, Self::Exponent, Self::Signif) {
+            fn decompose_raw(self) -> (bool, Self::RawExponent, Self::Signif) {
                 let bits = self.bits();
 
                 (mask!(bits; 1 => $expn_n, $signif_n) != 0,
-                 mask!(bits; $expn_n => $signif_n) as Self::Exponent,
+                 mask!(bits; $expn_n => $signif_n) as Self::RawExponent,
                  mask!(bits; $signif_n => ) as Self::Signif)
 
             }
             #[inline]
-            fn recompose(sign: bool, expn: Self::Exponent, signif: Self::Signif) -> Self {
+            fn recompose_raw(sign: bool, expn: Self::RawExponent, signif: Self::Signif) -> Self {
                 Self::from_bits(
                     unmask!(sign as Self::Bits => $expn_n, $signif_n) |
                     unmask!(expn as Self::Bits => $signif_n) |
                     unmask!(signif as Self::Bits => ))
+            }
+
+            #[inline]
+            fn decompose(self) -> (bool, Self::Exponent, Self::Signif) {
+                let (sign, expn, signif) = self.decompose_raw();
+                (sign, expn as Self::Exponent - Self::exponent_bias(),
+                 signif)
+            }
+            #[inline]
+            fn recompose(sign: bool, expn: Self::Exponent, signif: Self::Signif) -> Self {
+                Self::recompose_raw(sign,
+                                    (expn + Self::exponent_bias()) as Self::RawExponent,
+                                    signif)
             }
         }
 
@@ -326,7 +425,8 @@ macro_rules! mk_impl {
                 assert_eq!($f::recompose(false, 1, 1).upto($f::recompose(false, 1, 10)).count(),
                            10);
 
-                assert_eq!($f::recompose(true, 0, 10).upto($f::recompose(false, 0, 10)).count(),
+                assert_eq!($f::recompose(true, -$f::exponent_bias(), 10)
+                           .upto($f::recompose(false, -$f::exponent_bias(), 10)).count(),
                            21);
             }
             #[test]
@@ -337,8 +437,8 @@ macro_rules! mk_impl {
                 assert_eq!($f::recompose(false, 1, 1)
                            .upto($f::recompose(false, 1, 10)).rev().count(),
                            10);
-                assert_eq!($f::recompose(true, 0, 10)
-                           .upto($f::recompose(false, 0, 10)).rev().count(),
+                assert_eq!($f::recompose(true, -$f::exponent_bias(), 10)
+                           .upto($f::recompose(false, -$f::exponent_bias(), 10)).rev().count(),
                            21);
             }
 
@@ -365,8 +465,7 @@ macro_rules! mk_impl {
 
                 #[bench]
                 fn iter_pos(b: &mut Bencher) {
-                    let (_, expn, _) = $f::decompose(1.0);
-                    let end = $f::recompose(false, expn, 40);
+                    let end = $f::recompose(false, 0, 40);
                     b.iter(|| {
                         assert_eq!(black_box(1.0 as $f).upto(black_box(end))
                                    .map(black_box).count(),
@@ -375,7 +474,7 @@ macro_rules! mk_impl {
                 }
                 #[bench]
                 fn iter_over_zero(b: &mut Bencher) {
-                    let x = $f::recompose(false, 0, 20);
+                    let x = $f::recompose(false, -$f::exponent_bias(), 20);
                     b.iter(|| {
                         assert_eq!(black_box(-x).upto(black_box(x)).map(black_box).count(),
                                    41);
@@ -394,5 +493,5 @@ macro_rules! mk_impl {
     }
 }
 
-mk_impl!(f32, u32, u8, u32, 8, 23);
-mk_impl!(f64, u64, u16, u64, 11, 52);
+mk_impl!(f32, u32, i16, u8, u32, 8, 23);
+mk_impl!(f64, u64, i16, u16, u64, 11, 52);
