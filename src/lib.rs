@@ -14,7 +14,7 @@
 //! ```rust
 //! use ieee754::Ieee754;
 //!
-//! // there are 840 single-precision floats in between 1.0 and 1.0001
+//! // there are 840 single-precision floats between 1.0 and 1.0001
 //! // (inclusive).
 //! assert_eq!(1_f32.upto(1.0001).count(), 840);
 //! ```
@@ -63,13 +63,13 @@ impl<T: Ieee754> DoubleEndedIterator for Iter<T> {
 
 /// Types that are IEEE754 floating point numbers.
 pub trait Ieee754: Copy + PartialEq + PartialOrd {
-    /// Iterate over each value of `T` in `[self, lim]`.
+    /// Iterate over each value of `Self` in `[self, lim]`.
     ///
     /// # Panics
     ///
     /// Panics if `self > lim`, or if either are NaN.
     ///
-    /// # Example
+    /// # Examples
     ///
     /// ```rust
     /// use ieee754::Ieee754;
@@ -82,35 +82,142 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
 
     /// A type that represents the raw bits of `Self`.
     type Bits: Eq + PartialEq + PartialOrd + Ord + Copy;
-    /// A type large enough to store the exponent of `Self`.
+    /// A type large enough to store the true exponent of `Self`.
     type Exponent;
     /// A type large enough to store the significand of `Self`.
     type Signif;
 
     /// Return the next value after `self`.
     ///
-    /// Calling this on NaN will yield nonsense.
+    /// Calling this on NaN or positive infinity will yield nonsense.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ieee754::Ieee754;
+    /// let x: f32 = 1.0;
+    /// assert_eq!(x.next(), 1.000000119209);
+    /// ```
     fn next(self) -> Self;
 
     /// Return the previous value before `self`.
     ///
-    /// Calling this on NaN will yield nonsense.
+    /// Calling this on NaN or negative infinity will yield nonsense.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ieee754::Ieee754;
+    /// let x: f32 = 1.0;
+    /// assert_eq!(x.prev(), 0.99999995);
+    /// ```
     fn prev(self) -> Self;
     /// View `self` as a collection of bits.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ieee754::Ieee754;
+    /// let x: f32 = 1.0;
+    /// assert_eq!(x.bits(), 0x3f80_0000);
+    /// ```
     fn bits(self) -> Self::Bits;
     /// View a collections of bits as a floating point number.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ieee754::Ieee754;
+    /// assert_eq!(f32::from_bits(0xbf80_0000), -1.0);
+    /// ```
     fn from_bits(x: Self::Bits) -> Self;
     /// Get the bias of the stored exponent.
-    fn exponent_bias(self) -> Self::Exponent;
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ieee754::Ieee754;
+    ///
+    /// assert_eq!(f32::exponent_bias(), 127);
+    /// assert_eq!(f64::exponent_bias(), 1023);
+    /// ```
+    fn exponent_bias() -> Self::Exponent;
     /// Break `self` into the three constituent parts of an IEEE754 float.
     ///
     /// The exponent returned is the raw bits, use `exponent_bias` to
     /// compute the offset required.
+    ///
+    /// # Examples
+    ///
+    /// Single precision:
+    ///
+    /// ```rust
+    /// use ieee754::Ieee754;
+    ///
+    /// assert_eq!(1_f32.decompose(), (false, 127, 0));
+    /// assert_eq!(1234.567_f32.decompose(), (false, 137, 0x1a5225));
+    ///
+    /// assert_eq!((-0.525_f32).decompose(), (true, 126, 0x66666));
+    ///
+    /// assert_eq!(std::f32::INFINITY.decompose(), (false, 255, 0));
+    ///
+    /// let (sign, expn, signif) = std::f32::NAN.decompose();
+    /// assert_eq!((sign, expn), (false, 255));
+    /// assert!(signif != 0);
+    /// ```
+    ///
+    /// Double precision:
+    ///
+    /// ```rust
+    /// use ieee754::Ieee754;
+    ///
+    /// assert_eq!(1_f64.decompose(), (false, 1023, 0));
+    /// assert_eq!(1234.567_f64.decompose(), (false, 1033, 0x34a449ba5e354));
+    ///
+    /// assert_eq!((-0.525_f64).decompose(), (true, 1022, 0xcccc_cccc_cccd));
+    ///
+    /// assert_eq!(std::f64::INFINITY.decompose(), (false, 2047, 0));
+    ///
+    /// let (sign, expn, signif) = std::f64::NAN.decompose();
+    /// assert_eq!((sign, expn), (false, 2047));
+    /// assert!(signif != 0);
+    /// ```
+
     fn decompose(self) -> (bool, Self::Exponent, Self::Signif);
     /// Create a `Self` out of the three constituent parts of an IEEE754 float.
     ///
     /// The exponent should be the raw bits, use `exponent_bias` to
     /// compute the offset required.
+    ///
+    /// # Examples
+    ///
+    /// Single precision:
+    ///
+    /// ```rust
+    /// use ieee754::Ieee754;
+    ///
+    /// assert_eq!(f32::recompose(false, 127, 0), 1.0);
+    /// assert_eq!(f32::recompose(false, 137, 0x1a5225), 1234.567);
+    /// assert_eq!(f32::recompose(true, 126, 0x66666), -0.525);
+    ///
+    /// assert_eq!(f32::recompose(false, 255, 0), std::f32::INFINITY);
+    ///
+    /// assert!(f32::recompose(false, 255, 1).is_nan());
+    /// ```
+    ///
+    /// Double precision:
+    ///
+    /// ```rust
+    /// use ieee754::Ieee754;
+    ///
+    /// assert_eq!(f64::recompose(false, 1023, 0), 1.0);
+    /// assert_eq!(f64::recompose(false, 1033, 0x34a449ba5e354), 1234.567);
+    /// assert_eq!(f64::recompose(true, 1022, 0xcccc_cccc_cccd), -0.525);
+    ///
+    /// assert_eq!(f64::recompose(false, 2047, 0), std::f64::INFINITY);
+    ///
+    /// assert!(f64::recompose(false, 2047, 1).is_nan());
+    /// ```
     fn recompose(sign: bool, expn: Self::Exponent, signif: Self::Signif) -> Self;
 }
 
@@ -179,8 +286,8 @@ macro_rules! mk_impl {
             }
 
             #[inline]
-            fn exponent_bias(self) -> Self::Exponent {
-                1 << ($expn_n - 1) - 1
+            fn exponent_bias() -> Self::Exponent {
+                (1 << ($expn_n - 1)) - 1
             }
 
             #[inline]
