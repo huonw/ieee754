@@ -87,7 +87,7 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// A type large enough to store the raw exponent (i.e. with the bias).
     type RawExponent;
     /// A type large enough to store the significand of `Self`.
-    type Signif;
+    type Significand;
 
     /// Return the next value after `self`.
     ///
@@ -185,7 +185,7 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// assert_eq!((sign, expn), (false, 2047));
     /// assert!(signif != 0);
     /// ```
-    fn decompose_raw(self) -> (bool, Self::RawExponent, Self::Signif);
+    fn decompose_raw(self) -> (bool, Self::RawExponent, Self::Significand);
 
     /// Create a `Self` out of the three constituent parts of an IEEE754 float.
     ///
@@ -222,7 +222,7 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     ///
     /// assert!(f64::recompose_raw(false, 2047, 1).is_nan());
     /// ```
-    fn recompose_raw(sign: bool, expn: Self::RawExponent, signif: Self::Signif) -> Self;
+    fn recompose_raw(sign: bool, expn: Self::RawExponent, signif: Self::Significand) -> Self;
 
     /// Break `self` into the three constituent parts of an IEEE754 float.
     ///
@@ -266,7 +266,7 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// assert_eq!((sign, expn), (false, 1024));
     /// assert!(signif != 0);
     /// ```
-    fn decompose(self) -> (bool, Self::Exponent, Self::Signif);
+    fn decompose(self) -> (bool, Self::Exponent, Self::Significand);
 
     /// Create a `Self` out of the three constituent parts of an IEEE754 float.
     ///
@@ -303,7 +303,7 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     ///
     /// assert!(f64::recompose(false, 1024, 1).is_nan());
     /// ```
-    fn recompose(sign: bool, expn: Self::Exponent, signif: Self::Signif) -> Self;
+    fn recompose(sign: bool, expn: Self::Exponent, signif: Self::Significand) -> Self;
 }
 
 macro_rules! mask{
@@ -324,7 +324,7 @@ macro_rules! mk_impl {
             type Bits = $bits;
             type Exponent = $expn;
             type RawExponent = $expn_raw;
-            type Signif = $signif;
+            type Significand = $signif;
             #[inline]
             fn upto(self, lim: Self) -> Iter<Self> {
                 assert!(self <= lim);
@@ -385,16 +385,16 @@ macro_rules! mk_impl {
                 unsafe {mem::transmute(bits)}
             }
             #[inline]
-            fn decompose_raw(self) -> (bool, Self::RawExponent, Self::Signif) {
+            fn decompose_raw(self) -> (bool, Self::RawExponent, Self::Significand) {
                 let bits = self.bits();
 
                 (mask!(bits; 1 => $expn_n, $signif_n) != 0,
                  mask!(bits; $expn_n => $signif_n) as Self::RawExponent,
-                 mask!(bits; $signif_n => ) as Self::Signif)
+                 mask!(bits; $signif_n => ) as Self::Significand)
 
             }
             #[inline]
-            fn recompose_raw(sign: bool, expn: Self::RawExponent, signif: Self::Signif) -> Self {
+            fn recompose_raw(sign: bool, expn: Self::RawExponent, signif: Self::Significand) -> Self {
                 Self::from_bits(
                     unmask!(sign as Self::Bits => $expn_n, $signif_n) |
                     unmask!(expn as Self::Bits => $signif_n) |
@@ -402,13 +402,13 @@ macro_rules! mk_impl {
             }
 
             #[inline]
-            fn decompose(self) -> (bool, Self::Exponent, Self::Signif) {
+            fn decompose(self) -> (bool, Self::Exponent, Self::Significand) {
                 let (sign, expn, signif) = self.decompose_raw();
                 (sign, expn as Self::Exponent - Self::exponent_bias(),
                  signif)
             }
             #[inline]
-            fn recompose(sign: bool, expn: Self::Exponent, signif: Self::Signif) -> Self {
+            fn recompose(sign: bool, expn: Self::Exponent, signif: Self::Significand) -> Self {
                 Self::recompose_raw(sign,
                                     (expn + Self::exponent_bias()) as Self::RawExponent,
                                     signif)
