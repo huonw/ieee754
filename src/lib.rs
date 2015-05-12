@@ -152,14 +152,14 @@ macro_rules! mk_impl {
                 let abs_mask = (!(0 as Self::Bits)) >> 1;
                 let (sign, _expn, _signif) = self.decompose();
                 let mut bits = self.bits();
-                if bits & abs_mask == 0 {
-                    bits = 1;
-                } else if sign {
-                    // neg
+                if sign {
                     bits -= 1;
+                    if bits == !abs_mask {
+                        // normalise -0.0 to +0.0
+                        bits = 0
+                    }
                 } else {
-                    // pos
-                    bits += 1;
+                    bits += 1
                 }
                 Self::from_bits(bits)
             }
@@ -168,12 +168,12 @@ macro_rules! mk_impl {
                 let abs_mask = (!(0 as Self::Bits)) >> 1;
                 let (sign, _expn, _signif) = self.decompose();
                 let mut bits = self.bits();
-                if bits & abs_mask == 0 {
-                    bits = 1 | !abs_mask;
-                } else if sign {
-                    bits += 1;
+                if sign {
+                     bits += 1;
+                } else if bits & abs_mask == 0 {
+                     bits = 1 | !abs_mask;
                 } else {
-                    bits -= 1;
+                     bits -= 1;
                 }
                 Self::from_bits(bits)
             }
