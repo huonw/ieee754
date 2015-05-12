@@ -130,7 +130,7 @@ macro_rules! unmask {
 }
 
 macro_rules! mk_impl {
-    ($f: ty, $bits: ty, $expn: ty, $signif: ty,
+    ($f: ident, $bits: ty, $expn: ty, $signif: ty,
      $expn_n: expr, $signif_n: expr) => {
         impl Ieee754 for $f {
             type Bits = $bits;
@@ -198,54 +198,83 @@ macro_rules! mk_impl {
             }
         }
 
+        #[cfg(test)]
+        mod $f {
+            use Ieee754;
+            #[test]
+            fn upto() {
+                assert_eq!((0.0 as $f).upto(0.0).collect::<Vec<_>>(),
+                           &[0.0]);
+                assert_eq!($f::recompose(false, 1, 1).upto($f::recompose(false, 1, 10)).count(),
+                           10);
+
+                assert_eq!($f::recompose(true, 0, 10).upto($f::recompose(false, 0, 10)).count(),
+                           21);
+            }
+            #[test]
+            fn upto_rev() {
+                assert_eq!(0.0_f32.upto(0.0_f32).rev().collect::<Vec<_>>(),
+                           &[0.0]);
+
+                assert_eq!($f::recompose(false, 1, 1)
+                           .upto($f::recompose(false, 1, 10)).rev().count(),
+                           10);
+                assert_eq!($f::recompose(true, 0, 10)
+                           .upto($f::recompose(false, 0, 10)).rev().count(),
+                           21);
+            }
+
+            #[test]
+            fn upto_infinities() {
+                use std::$f as f;
+                assert_eq!(f::MAX.upto(f::INFINITY).collect::<Vec<_>>(),
+                           &[f::MAX, f::INFINITY]);
+                assert_eq!(f::NEG_INFINITY.upto(f::MIN).collect::<Vec<_>>(),
+                           &[f::NEG_INFINITY, f::MIN]);
+            }
+            #[test]
+            fn upto_infinities_rev() {
+                use std::$f as f;
+                assert_eq!(f::MAX.upto(f::INFINITY).rev().collect::<Vec<_>>(),
+                           &[f::INFINITY, f::MAX]);
+                assert_eq!(f::NEG_INFINITY.upto(f::MIN).rev().collect::<Vec<_>>(),
+                           &[f::MIN, f::NEG_INFINITY]);
+            }
+            #[cfg(all(test, feature = "unstable"))]
+            mod benches {
+                use test::{Bencher, black_box};
+                use Ieee754;
+
+                #[bench]
+                fn iter_pos(b: &mut Bencher) {
+                    let (_, expn, _) = $f::decompose(1.0);
+                    let end = $f::recompose(false, expn, 40);
+                    b.iter(|| {
+                        assert_eq!(black_box(1.0 as $f).upto(black_box(end))
+                                   .map(black_box).count(),
+                                   41);
+                    })
+                }
+                #[bench]
+                fn iter_over_zero(b: &mut Bencher) {
+                    let x = $f::recompose(false, 0, 20);
+                    b.iter(|| {
+                        assert_eq!(black_box(-x).upto(black_box(x)).map(black_box).count(),
+                                   41);
+                    })
+                }
+
+                #[bench]
+                fn baseline(b: &mut Bencher) {
+                    b.iter(|| {
+                        assert_eq!((black_box(0 as $bits)..black_box(41)).map(black_box).count(),
+                                   41);
+                    })
+                }
+            }
+        }
     }
 }
 
 mk_impl!(f32, u32, u8, u32, 8, 23);
 mk_impl!(f64, u64, u16, u64, 11, 52);
-
-#[cfg(test)]
-mod tests {
-    use super::Ieee754;
-
-    #[test]
-    fn all() {
-        assert_eq!(0.0_f32.upto(0.0_f32).collect::<Vec<_>>(),
-                   &[0.0]);
-
-        assert_eq!(f32::recompose(false, 1, 1).upto(f32::recompose(false, 1, 10)).count(),
-                   10);
-
-        assert_eq!(f32::recompose(true, 0, 10).upto(f32::recompose(false, 0, 10)).count(),
-                   21);
-
-    }
-}
-#[cfg(all(test, feature = "unstable"))]
-mod benches {
-    use test::{Bencher, black_box};
-    use super::Ieee754;
-
-    #[bench]
-    fn f32_iter_pos(b: &mut Bencher) {
-        let (_, expn, _) = 1_f32.decompose();
-        let end = f32::recompose(false, expn, 100);
-        b.iter(|| black_box(1_f32).upto(end).count())
-    }
-    #[bench]
-    fn f32_iter_over_zero(b: &mut Bencher) {
-        let x = f32::recompose(false, 0, 20);
-        b.iter(|| black_box(-x).upto(x).count())
-    }
-    #[bench]
-    fn f64_iter_pos(b: &mut Bencher) {
-        let (_, expn, _) = 1_f64.decompose();
-        let end = f64::recompose(false, expn, 100);
-        b.iter(|| black_box(1_f64).upto(end).count())
-    }
-    #[bench]
-    fn f64_iter_over_zero(b: &mut Bencher) {
-        let x = f64::recompose(false, 0, 20);
-        b.iter(|| black_box(-x).upto(x).count())
-    }
-}
