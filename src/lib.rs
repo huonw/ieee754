@@ -37,7 +37,10 @@ impl<T: Ieee754> Iterator for Iter<T> {
 
         let x = self.from;
         let y = x.next();
-        if x == self.to {
+        // we've canonicalised negative zero to positive zero, and
+        // we're guaranteed that neither is NaN, so comparing bitwise
+        // is valid (and 20% faster for the `all` example).
+        if x.bits() == self.to.bits() {
             self.done = true;
         }
         self.from = y;
@@ -75,17 +78,10 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// // (inclusive).
     /// assert_eq!(1_f32.upto(1.0001).count(), 840);
     /// ```
-    fn upto(self, lim: Self) -> Iter<Self> {
-        assert!(self <= lim);
-        Iter {
-            from: self,
-            to: lim,
-            done: false,
-        }
-    }
+    fn upto(self, lim: Self) -> Iter<Self>;
 
     /// A type that represents the raw bits of `Self`.
-    type Bits;
+    type Bits: Eq + PartialEq + PartialOrd + Ord + Copy;
     /// A type large enough to store the exponent of `Self`.
     type Exponent;
     /// A type large enough to store the significand of `Self`.
@@ -136,7 +132,21 @@ macro_rules! mk_impl {
             type Bits = $bits;
             type Exponent = $expn;
             type Signif = $signif;
+            #[inline]
+            fn upto(self, lim: Self) -> Iter<Self> {
+                assert!(self <= lim);
+                // map -0.0 to 0.0, i.e. ensure that any zero is
+                // stored in a canonical manner. This is necessary to
+                // use bit-hacks for the comparison in next.
+                #[inline(always)]
+                fn canon(x: $f) -> $f { if x == 0.0 { 0.0 } else { x } }
 
+                Iter {
+                    from: canon(self),
+                    to: canon(lim),
+                    done: false,
+                }
+            }
             #[inline]
             fn next(self) -> Self {
                 let abs_mask = (!(0 as Self::Bits)) >> 1;
@@ -168,6 +178,7 @@ macro_rules! mk_impl {
                 Self::from_bits(bits)
             }
 
+            #[inline]
             fn exponent_bias(self) -> Self::Exponent {
                 1 << ($expn_n - 1) - 1
             }
