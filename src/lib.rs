@@ -553,7 +553,7 @@ macro_rules! mk_impl {
                 }
 
                 #[bench]
-                fn baseline(b: &mut Bencher) {
+                fn iter_baseline(b: &mut Bencher) {
                     b.iter(|| {
                         assert_eq!((black_box(0 as $bits)..black_box(41)).map(black_box).count(),
                                    41);
