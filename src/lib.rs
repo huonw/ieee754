@@ -141,6 +141,12 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// ```
     fn next(self) -> Self;
 
+    /// Return the unit-in-the-last-place ulp of `self`. That is,
+    /// `x.abs().next() - x.abs()`, but handling overflow properly.
+    ///
+    /// Returns `None` if `self` is not finite.
+    fn ulp(self) -> Option<Self>;
+
     /// Return the previous value before `self`.
     ///
     /// Calling this on NaN or negative infinity will yield nonsense.
@@ -380,6 +386,21 @@ macro_rules! mk_impl {
                 }
             }
             #[inline]
+            fn ulp(self) -> Option<Self> {
+                if !self.is_finite(){
+                    return None
+                }
+
+                let this = self.abs();
+                let next = this.next();
+                if next != ::std::$f::INFINITY {
+                    Some(next - this)
+                } else {
+                    Some(this - this.prev())
+                }
+            }
+
+            #[inline]
             fn next(self) -> Self {
                 let abs_mask = (!(0 as Self::Bits)) >> 1;
                 let (sign, _expn, _signif) = self.decompose_raw();
@@ -527,6 +548,27 @@ macro_rules! mk_impl {
                 }
                 assert_eq!(iter.next(), None);
                 assert_eq!(iter.size_hint(), (0, Some(0)))
+            }
+
+            #[test]
+            fn next_prev_order() {
+                let cases = [0.0 as $f, 1.0, 1.0001, 1e30, -1.0, -1.0001, -1e30];
+                for &x in &cases {
+                    assert!(x.next() > x);
+                    assert!(x.prev() < x);
+                }
+            }
+
+            #[test]
+            fn ulp() {
+                let cases = [0.0 as $f, 1.0, 1.0001, 1e30];
+
+                for x in &cases {
+                    let next = x.next();
+                    assert_eq!(x + x.ulp().unwrap(), next);
+                    let y = -x;
+                    assert_eq!(y - y.ulp().unwrap(), -next);
+                }
             }
 
             #[cfg(all(test, feature = "unstable"))]
