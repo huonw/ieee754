@@ -175,7 +175,8 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     ///
     /// ```rust
     /// use ieee754::Ieee754;
-    /// assert_eq!(f32::from_bits(0xbf80_0000), -1.0);
+    /// let float: f32 = Ieee754::from_bits(0xbf80_0000);
+    /// assert_eq!(float, -1.0);
     /// ```
     fn from_bits(x: Self::Bits) -> Self;
     /// Get the bias of the stored exponent.
@@ -414,7 +415,7 @@ macro_rules! mk_impl {
                 } else {
                     bits += 1
                 }
-                Self::from_bits(bits)
+                Ieee754::from_bits(bits)
             }
             #[inline]
             fn prev(self) -> Self {
@@ -428,7 +429,7 @@ macro_rules! mk_impl {
                 } else {
                      bits -= 1;
                 }
-                Self::from_bits(bits)
+                Ieee754::from_bits(bits)
             }
 
             #[inline]
@@ -455,7 +456,7 @@ macro_rules! mk_impl {
             }
             #[inline]
             fn recompose_raw(sign: bool, expn: Self::RawExponent, signif: Self::Significand) -> Self {
-                Self::from_bits(
+                Ieee754::from_bits(
                     unmask!(sign as Self::Bits => $expn_n, $signif_n) |
                     unmask!(expn as Self::Bits => $signif_n) |
                     unmask!(signif as Self::Bits => ))
