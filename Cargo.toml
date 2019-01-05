@@ -13,5 +13,12 @@ description = """
 Low-level manipulations of IEEE754 floating-point numbers.
 """
 
+[dev-dependencies]
+criterion = "0.2"
+
+[[bench]]
+name = "bench"
+harness = false
+
 [features]
 unstable = []

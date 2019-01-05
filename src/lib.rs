@@ -19,9 +19,6 @@
 //! assert_eq!(1_f32.upto(1.0001).count(), 840);
 //! ```
 
-#![cfg_attr(all(test, feature = "unstable"), feature(test))]
-#[cfg(all(test, feature = "unstable"))] extern crate test;
-
 use std::mem;
 
 /// An iterator over floating point numbers, created by `Ieee754::upto`.
@@ -569,38 +566,6 @@ macro_rules! mk_impl {
                     assert_eq!(x + x.ulp().unwrap(), next);
                     let y = -x;
                     assert_eq!(y - y.ulp().unwrap(), -next);
-                }
-            }
-
-            #[cfg(all(test, feature = "unstable"))]
-            mod benches {
-                use test::{Bencher, black_box};
-                use Ieee754;
-
-                #[bench]
-                fn iter_pos(b: &mut Bencher) {
-                    let end = $f::recompose(false, 0, 40);
-                    b.iter(|| {
-                        assert_eq!(black_box(1.0 as $f).upto(black_box(end))
-                                   .map(black_box).count(),
-                                   41);
-                    })
-                }
-                #[bench]
-                fn iter_over_zero(b: &mut Bencher) {
-                    let x = $f::recompose(false, -$f::exponent_bias(), 20);
-                    b.iter(|| {
-                        assert_eq!(black_box(-x).upto(black_box(x)).map(black_box).count(),
-                                   41);
-                    })
-                }
-
-                #[bench]
-                fn iter_baseline(b: &mut Bencher) {
-                    b.iter(|| {
-                        assert_eq!((black_box(0 as $bits)..black_box(41)).map(black_box).count(),
-                                   41);
-                    })
                 }
             }
         }

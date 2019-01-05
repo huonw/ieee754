@@ -18,7 +18,7 @@ $cargo build -v $target_param --features "$features"
 $cargo test -v $target_param --features "$features"
 
 # for now, `cross bench` is broken https://github.com/rust-embedded/cross/issues/239
-if [ "$cargo" != "cross" ]; then
+if [ "$cargo" != "cross" -a "$TRAVIS_RUST_VERSION" != "1.23.0" ]; then
     $cargo bench -v $target_param --features "$features" -- --test # don't actually record numbers
 fi
 
