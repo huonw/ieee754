@@ -413,17 +413,20 @@ macro_rules! mk_impl {
             }
             #[inline]
             fn ulp(self) -> Option<Self> {
-                if !self.is_finite(){
-                    return None
-                }
+                let (_sign, expn, _signif) = self.decompose_raw();
 
-                // absolute value
-                let this = abs(self);
-                let next = this.next();
-                if next != ::core::$f::INFINITY {
-                    Some(next - this)
-                } else {
-                    Some(this - this.prev())
+                const MAX_EXPN: $expn_raw = ((1u64 << $expn_n) - 1) as $expn_raw;
+                match expn {
+                    MAX_EXPN => None,
+                    0 => Some($f::recompose_raw(false, 0, 1)),
+                    _ => {
+                        let ulp_expn = expn.saturating_sub($signif_n);
+                        if ulp_expn == 0 {
+                            Some($f::recompose_raw(false, 0, 1 << (expn - 1)))
+                        } else {
+                            Some($f::recompose_raw(false, ulp_expn, 0))
+                        }
+                    }
                 }
             }
 
