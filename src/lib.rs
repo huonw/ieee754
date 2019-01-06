@@ -19,7 +19,10 @@
 //! assert_eq!(1_f32.upto(1.0001).count(), 840);
 //! ```
 
-use std::mem;
+#![no_std]
+#[cfg(test)] #[macro_use] extern crate std;
+
+use core::mem;
 
 /// An iterator over floating point numbers, created by `Ieee754::upto`.
 pub struct Iter<T: Ieee754> {
@@ -62,11 +65,11 @@ impl<T: Ieee754> Iterator for Iter<T> {
         let to = if to_sign { -(to as i64) } else { to as i64 };
 
         let distance = (to - from + 1) as u64;
-        if distance <= std::usize::MAX as u64 {
+        if distance <= core::usize::MAX as u64 {
             let d = distance as usize;
             (d, Some(d))
         } else {
-            (std::usize::MAX, None)
+            (core::usize::MAX, None)
         }
     }
 }
@@ -360,6 +363,31 @@ macro_rules! unmask {
     }
 }
 
+/// Return the absolute value of `x`.
+///
+/// This provides a no_std/core-only version of the built-in `abs` in
+/// `std`, until
+/// [#50145](https://github.com/rust-lang/rust/issues/50145) is
+/// addressed.
+///
+/// ```rust
+/// use std::{f32, f64};
+///
+/// assert_eq!(ieee754::abs(0_f32), 0.0);
+/// assert_eq!(ieee754::abs(0_f64), 0.0);
+///
+/// assert_eq!(ieee754::abs(12.34_f32), 12.34);
+/// assert_eq!(ieee754::abs(-12.34_f64), 12.34);
+///
+/// assert!(ieee754::abs(f32::NAN).is_nan());
+/// assert_eq!(ieee754::abs(f64::NEG_INFINITY), f64::INFINITY);
+/// ```
+#[inline]
+pub fn abs<F: Ieee754>(x: F) -> F {
+    let (_, e, s) = x.decompose_raw();
+    F::recompose_raw(false, e, s)
+}
+
 macro_rules! mk_impl {
     ($f: ident, $bits: ty, $expn: ty, $expn_raw: ty, $signif: ty,
      $expn_n: expr, $signif_n: expr) => {
@@ -389,9 +417,10 @@ macro_rules! mk_impl {
                     return None
                 }
 
-                let this = self.abs();
+                // absolute value
+                let this = abs(self);
                 let next = this.next();
-                if next != ::std::$f::INFINITY {
+                if next != ::core::$f::INFINITY {
                     Some(next - this)
                 } else {
                     Some(this - this.prev())
@@ -475,7 +504,10 @@ macro_rules! mk_impl {
 
         #[cfg(test)]
         mod $f {
-            use Ieee754;
+            use std::prelude::v1::*;
+            use std::$f;
+
+            use {Ieee754, abs};
             #[test]
             fn upto() {
                 assert_eq!((0.0 as $f).upto(0.0).collect::<Vec<_>>(),
@@ -563,9 +595,24 @@ macro_rules! mk_impl {
 
                 for x in &cases {
                     let next = x.next();
+                    println!("next {}", next);
                     assert_eq!(x + x.ulp().unwrap(), next);
                     let y = -x;
+                    println!("y {}", y);
                     assert_eq!(y - y.ulp().unwrap(), -next);
+                }
+            }
+
+            #[test]
+            fn test_abs() {
+                assert!(abs($f::NAN).is_nan());
+
+                let cases = [0.0 as $f, -1.0, 1.0001,
+                             // denormals
+                             $f::recompose_raw(false, 0, 123), $f::recompose(true, 0, 123),
+                             $f::NEG_INFINITY, $f::INFINITY];
+                for x in &cases {
+                    assert_eq!(abs(*x), x.abs());
                 }
             }
         }
