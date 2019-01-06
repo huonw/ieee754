@@ -590,16 +590,78 @@ macro_rules! mk_impl {
             }
 
             #[test]
-            fn ulp() {
-                let cases = [0.0 as $f, 1.0, 1.0001, 1e30];
+            fn ulp_smoke() {
+                let smallest_subnormal = $f::recompose_raw(false, 0, 1);
+                let smallest_normal = $f::recompose_raw(false, 1, 0);
+                assert_eq!((0.0 as $f).ulp(), Some(smallest_subnormal));
+                assert_eq!(smallest_subnormal.ulp(), Some(smallest_subnormal));
+                assert_eq!($f::recompose_raw(true, 0, 9436).ulp(),
+                           Some(smallest_subnormal));
+                assert_eq!(smallest_normal.ulp(), Some(smallest_subnormal));
 
-                for x in &cases {
-                    let next = x.next();
-                    println!("next {}", next);
-                    assert_eq!(x + x.ulp().unwrap(), next);
-                    let y = -x;
-                    println!("y {}", y);
-                    assert_eq!(y - y.ulp().unwrap(), -next);
+                assert_eq!((1.0 as $f).ulp(),
+                           Some($f::recompose(false, -$signif_n, 0)));
+
+                assert_eq!((-123.456e30 as $f).ulp(),
+                           Some($f::recompose(false, 106 - $signif_n, 0)));
+
+                assert_eq!($f::INFINITY.ulp(), None);
+                assert_eq!($f::NEG_INFINITY.ulp(), None);
+                assert_eq!($f::NAN.ulp(), None);
+            }
+
+            #[test]
+            fn ulp_aggressive() {
+                fn check_ulp(x: $f, ulp: $f) {
+                    println!("  {:e} {:e}", x, ulp);
+                    assert_eq!(x.ulp(), Some(ulp));
+                    // with signed-magnitude we need to be moving away
+                    let same_sign_ulp = if x < 0.0 { -ulp } else { ulp };
+
+                    assert_ne!(x + same_sign_ulp, x, "adding ulp should be different");
+
+                    if ulp / 2.0 > 0.0 {
+                        // floats break ties like this by rounding to
+                        // even (in the default mode), so adding half
+                        // a ulp may be a new value depending on the
+                        // significand.
+                        if x.decompose().2 & 1 == 0 {
+                            assert_eq!(x + same_sign_ulp / 2.0, x);
+                        } else {
+                            assert_eq!(x + same_sign_ulp / 2.0, x + same_sign_ulp);
+                        }
+                    }
+                    // no ties to worry about
+                    assert_eq!(x + same_sign_ulp / 4.0, x);
+                }
+
+                let smallest_subnormal = $f::recompose_raw(false, 0, 1);
+                let mut ulp = smallest_subnormal;
+
+                check_ulp(0.0, ulp);
+
+                let mut pow2 = smallest_subnormal;
+                for i in 0..200 {
+                    println!("{}", i);
+                    check_ulp(pow2, ulp);
+                    check_ulp(-pow2, ulp);
+
+                    let (_, e, _) = pow2.decompose_raw();
+                    if e > 0 {
+                        for &signif in &[1,
+                                         // random numbers
+                                         9436, 1577069,
+                                         // last two for this exponent
+                                         (1 << $signif_n) - 2, (1 << $signif_n) - 1] {
+                            check_ulp($f::recompose_raw(false, e, signif), ulp);
+                            check_ulp($f::recompose_raw(true, e, signif), ulp);
+                        }
+                    }
+
+                    pow2 *= 2.0;
+                    if i >= $signif_n {
+                        ulp *= 2.0;
+                    }
                 }
             }
 
