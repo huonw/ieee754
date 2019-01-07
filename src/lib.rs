@@ -433,9 +433,10 @@ macro_rules! mk_impl {
             #[inline]
             fn next(self) -> Self {
                 let abs_mask = (!(0 as Self::Bits)) >> 1;
-                let (sign, _expn, _signif) = self.decompose_raw();
                 let mut bits = self.bits();
-                if sign {
+                if self == 0.0 {
+                    bits = 1;
+                } else if self < 0.0 {
                     bits -= 1;
                     if bits == !abs_mask {
                         // normalise -0.0 to +0.0
@@ -449,9 +450,8 @@ macro_rules! mk_impl {
             #[inline]
             fn prev(self) -> Self {
                 let abs_mask = (!(0 as Self::Bits)) >> 1;
-                let (sign, _expn, _signif) = self.decompose_raw();
                 let mut bits = self.bits();
-                if sign {
+                if self < 0.0 {
                      bits += 1;
                 } else if bits & abs_mask == 0 {
                      bits = 1 | !abs_mask;
@@ -585,7 +585,7 @@ macro_rules! mk_impl {
 
             #[test]
             fn next_prev_order() {
-                let cases = [0.0 as $f, 1.0, 1.0001, 1e30, -1.0, -1.0001, -1e30];
+                let cases = [0.0 as $f, -0.0, 1.0, 1.0001, 1e30, -1.0, -1.0001, -1e30];
                 for &x in &cases {
                     assert!(x.next() > x);
                     assert!(x.prev() < x);
