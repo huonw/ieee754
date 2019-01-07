@@ -7,7 +7,7 @@ homepage = "https://github.com/huonw/ieee754"
 repository = "https://github.com/huonw/ieee754"
 documentation = "http://docs.rs/ieee754"
 license = "MIT/Apache-2.0"
-keywords = ["floating-point", "mathematics", "numerics"]
+keywords = ["floating-point", "mathematics", "numerics", "float"]
 
 description = """
 Low-level manipulations of IEEE754 floating-point numbers.
