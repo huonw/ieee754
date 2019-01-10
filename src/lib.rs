@@ -6,7 +6,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! ieee754 = "0.1"
+//! ieee754 = "0.2"
 //! ```
 //!
 //! # Examples
