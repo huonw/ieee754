@@ -17,7 +17,7 @@ Low-level manipulations of IEEE754 floating-point numbers.
 criterion = "0.2"
 
 [[bench]]
-name = "bench"
+name = "iter"
 harness = false
 
 [features]
