@@ -20,5 +20,9 @@ criterion = "0.2"
 name = "iter"
 harness = false
 
+[[bench]]
+name = "cmp"
+harness = false
+
 [features]
 unstable = []

@@ -23,6 +23,7 @@
 #[cfg(test)] #[macro_use] extern crate std;
 
 use core::mem;
+use core::cmp::Ordering;
 
 /// An iterator over floating point numbers, created by `Ieee754::upto`.
 pub struct Iter<T: Ieee754> {
@@ -350,6 +351,57 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// assert!(f64::recompose(false, 1024, 1).is_nan());
     /// ```
     fn recompose(sign: bool, expn: Self::Exponent, signif: Self::Significand) -> Self;
+
+    /// Compare `x` and `y` using the IEEE-754 `totalOrder` predicate
+    /// (Section 5.10).
+    ///
+    /// This orders NaNs before or after all non-NaN floats, depending
+    /// on the sign bit. Using -qNaN to represent a quiet NaN with
+    /// negative sign bit and similarly for a signalling NaN (sNaN),
+    /// the order is:
+    ///
+    /// ```txt
+    /// -qNaN < -sNaN < -∞ < -12.34 < -0.0 < +0.0 < +12.34 < +∞ < +sNaN < +qNaN
+    /// ```
+    ///
+    /// (NaNs are ordered according to their payload.)
+    ///
+    /// # Examples
+    ///
+    /// Single precision:
+    ///
+    /// ```rust
+    /// use std::cmp::Ordering;
+    /// use std::f32;
+    ///
+    /// use ieee754::Ieee754;
+    ///
+    /// assert_eq!(0_f32.total_cmp(&0_f32), Ordering::Equal);
+    /// assert_eq!(0_f32.total_cmp(&-0_f32), Ordering::Greater);
+    /// assert_eq!(0_f32.total_cmp(&1_f32), Ordering::Less);
+    /// assert_eq!(1e10_f32.total_cmp(&f32::NEG_INFINITY), Ordering::Greater);
+    /// assert_eq!(f32::NAN.total_cmp(&0_f32), Ordering::Greater);
+    /// assert_eq!(f32::NAN.total_cmp(&f32::INFINITY), Ordering::Greater);
+    /// assert_eq!((-f32::NAN).total_cmp(&f32::NEG_INFINITY), Ordering::Less);
+    /// ```
+    ///
+    /// Double precision:
+    ///
+    /// ```rust
+    /// use std::cmp::Ordering;
+    /// use std::f64;
+    ///
+    /// use ieee754::Ieee754;
+    ///
+    /// assert_eq!(0_f64.total_cmp(&0_f64), Ordering::Equal);
+    /// assert_eq!(0_f64.total_cmp(&-0_f64), Ordering::Greater);
+    /// assert_eq!(0_f64.total_cmp(&1_f64), Ordering::Less);
+    /// assert_eq!(1e10_f64.total_cmp(&f64::NEG_INFINITY), Ordering::Greater);
+    /// assert_eq!(f64::NAN.total_cmp(&0_f64), Ordering::Greater);
+    /// assert_eq!(f64::NAN.total_cmp(&f64::INFINITY), Ordering::Greater);
+    /// assert_eq!((-f64::NAN).total_cmp(&f64::NEG_INFINITY), Ordering::Less);
+    /// ```
+    fn total_cmp(&self, other: &Self) -> Ordering;
 }
 
 macro_rules! mask{
@@ -389,7 +441,8 @@ pub fn abs<F: Ieee754>(x: F) -> F {
 }
 
 macro_rules! mk_impl {
-    ($f: ident, $bits: ty, $expn: ty, $expn_raw: ty, $signif: ty,
+    ($f: ident, $bits: ty, $signed_bits: ty,
+     $expn: ty, $expn_raw: ty, $signif: ty,
      $expn_n: expr, $signif_n: expr) => {
         impl Ieee754 for $f {
             type Bits = $bits;
@@ -502,6 +555,18 @@ macro_rules! mk_impl {
                 Self::recompose_raw(sign,
                                     (expn + Self::exponent_bias()) as Self::RawExponent,
                                     signif)
+            }
+
+            #[inline]
+            fn total_cmp(&self, other: &Self) -> Ordering {
+                #[inline]
+                fn cmp_key(x: $f) -> $signed_bits {
+                    let bits = x.bits();
+                    let sign_bit = bits & (1 << ($expn_n + $signif_n));
+                    let mask = ((sign_bit as $signed_bits) >> ($expn_n + $signif_n)) as $bits >> 1;
+                    (bits ^ mask) as $signed_bits
+                }
+                cmp_key(*self).cmp(&cmp_key(*other))
             }
         }
 
@@ -680,9 +745,66 @@ macro_rules! mk_impl {
                     assert_eq!(abs(*x), x.abs());
                 }
             }
+
+            #[test]
+            fn total_cmp() {
+                let nan_exp = $f::NAN.decompose_raw().1;
+                let q = 1 << ($signif_n - 1);
+
+                let qnan0 = $f::recompose_raw(false, nan_exp, q);
+                let qnan1 = $f::recompose_raw(false, nan_exp, q | 1);
+                let qnanlarge = $f::recompose_raw(false, nan_exp, q | (q - 1));
+
+                let snan1 = $f::recompose_raw(false, nan_exp, 1);
+                let snan2 = $f::recompose_raw(false, nan_exp, 2);
+                let snanlarge = $f::recompose_raw(false, nan_exp, q - 1);
+
+                let subnormal = $f::recompose_raw(false, 0, 1);
+
+                // it's a total order, so we can literally write
+                // options in order, and compare them all, using their
+                // indices as ground-truth. NB. the snans seem to
+                // get canonicalized to qnan on some versions of i686
+                // Linux (using `cross` on Travis CI), so we can't
+                // include them.
+                let include_snan = cfg!(not(target_arch = "x86"));
+                // -qNaN
+                let mut cases = vec![-qnanlarge, -qnan1, -qnan0];
+                // -sNaN
+                if include_snan {
+                    cases.extend_from_slice(&[-snanlarge, -snan2, -snan1]);
+                }
+                // Numbers (note -0, +0)
+                cases.extend_from_slice(&[
+                    $f::NEG_INFINITY,
+                    -1e15, -1.001, -1.0, -0.999, -1e-15, -subnormal,
+                    -0.0, 0.0,
+                    subnormal, 1e-15, 0.999, 1.0, 1.001, 1e15,
+                    $f::INFINITY
+                ]);
+                // +sNaN
+                if include_snan {
+                    cases.extend_from_slice(&[snan1, snan2, snanlarge]);
+                }
+                // +qNaN
+                cases.extend_from_slice(&[qnan0, qnan1, qnanlarge]);
+
+                for (ix, &x) in cases.iter().enumerate() {
+                    for (iy, &y) in cases.iter().enumerate() {
+                        let computed = x.total_cmp(&y);
+                        let expected = ix.cmp(&iy);
+                        assert_eq!(
+                            computed, expected,
+                            "{:e} ({}, {:?}) cmp {:e} ({}, {:?}), got: {:?}, expected: {:?}",
+                            x, ix, x.decompose(),
+                            y, iy, y.decompose(),
+                            computed, expected);
+                    }
+                }
+            }
         }
     }
 }
 
-mk_impl!(f32, u32, i16, u8, u32, 8, 23);
-mk_impl!(f64, u64, i16, u16, u64, 11, 52);
+mk_impl!(f32, u32, i32, i16, u8, u32, 8, 23);
+mk_impl!(f64, u64, i64, i16, u16, u64, 11, 52);
