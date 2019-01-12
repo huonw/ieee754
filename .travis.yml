@@ -4,7 +4,7 @@ matrix:
 
   include:
       - rust: nightly
-        env: UNSTABLE=1 COVERAGE=1
+        env: COVERAGE=1
         sudo: required
 
       - rust: stable
