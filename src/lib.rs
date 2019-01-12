@@ -502,6 +502,60 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// assert_eq!((-f64::NAN).total_cmp(&f64::NEG_INFINITY), Ordering::Less);
     /// ```
     fn total_cmp(&self, other: &Self) -> Ordering;
+
+    /// Return the absolute value of `x`.
+    ///
+    /// This provides a no_std/core-only version of the built-in `abs` in
+    /// `std`, until
+    /// [#50145](https://github.com/rust-lang/rust/issues/50145) is
+    /// addressed.
+    ///
+    /// # Examples
+    ///
+    /// Single precision:
+    ///
+    /// ```rust
+    /// #![no_std]
+    /// # extern crate std; // this makes this "test" a lie, unfortunately
+    /// # extern crate ieee754;
+    /// use core::f32;
+    ///
+    /// use ieee754::Ieee754;
+    ///
+    /// # fn main() {
+    /// assert_eq!((0_f32).abs(), 0.0);
+    ///
+    /// assert_eq!((12.34_f32).abs(), 12.34);
+    /// assert_eq!((-12.34_f32).abs(), 12.34);
+    ///
+    /// assert_eq!(f32::INFINITY.abs(), f32::INFINITY);
+    /// assert_eq!(f32::NEG_INFINITY.abs(), f32::INFINITY);
+    /// assert!(f32::NAN.abs().is_nan());
+    /// # }
+    /// ```
+    ///
+    /// Double precision:
+    ///
+    /// ```rust
+    /// #![no_std]
+    /// # extern crate std; // this makes this "test" a lie, unfortunately
+    /// # extern crate ieee754;
+    /// use core::f64;
+    ///
+    /// use ieee754::Ieee754;
+    ///
+    /// # fn main() {
+    /// assert_eq!((0_f64).abs(), 0.0);
+    ///
+    /// assert_eq!((12.34_f64).abs(), 12.34);
+    /// assert_eq!((-12.34_f64).abs(), 12.34);
+    ///
+    /// assert_eq!(f64::INFINITY.abs(), f64::INFINITY);
+    /// assert_eq!(f64::NEG_INFINITY.abs(), f64::INFINITY);
+    /// assert!(f64::NAN.abs().is_nan());
+    /// # }
+    /// ```
+    fn abs(self) -> Self;
 }
 
 macro_rules! mask{
@@ -515,29 +569,10 @@ macro_rules! unmask {
     }
 }
 
-/// Return the absolute value of `x`.
-///
-/// This provides a no_std/core-only version of the built-in `abs` in
-/// `std`, until
-/// [#50145](https://github.com/rust-lang/rust/issues/50145) is
-/// addressed.
-///
-/// ```rust
-/// use std::{f32, f64};
-///
-/// assert_eq!(ieee754::abs(0_f32), 0.0);
-/// assert_eq!(ieee754::abs(0_f64), 0.0);
-///
-/// assert_eq!(ieee754::abs(12.34_f32), 12.34);
-/// assert_eq!(ieee754::abs(-12.34_f64), 12.34);
-///
-/// assert!(ieee754::abs(f32::NAN).is_nan());
-/// assert_eq!(ieee754::abs(f64::NEG_INFINITY), f64::INFINITY);
-/// ```
 #[inline]
+#[doc(hidden)]
 pub fn abs<F: Ieee754>(x: F) -> F {
-    let (_, e, s) = x.decompose_raw();
-    F::recompose_raw(false, e, s)
+    x.abs()
 }
 
 macro_rules! mk_impl {
@@ -668,6 +703,12 @@ macro_rules! mk_impl {
                 }
                 cmp_key(*self).cmp(&cmp_key(*other))
             }
+
+            #[inline]
+            fn abs(self) -> Self {
+                let (_, e, s) = self.decompose_raw();
+                Self::recompose_raw(false, e, s)
+            }
         }
 
         #[cfg(test)]
@@ -675,7 +716,7 @@ macro_rules! mk_impl {
             use std::prelude::v1::*;
             use std::$f;
 
-            use {Ieee754, abs};
+            use {Ieee754};
             #[test]
             fn upto() {
                 assert_eq!((0.0 as $f).upto(0.0).collect::<Vec<_>>(),
@@ -834,15 +875,16 @@ macro_rules! mk_impl {
             }
 
             #[test]
-            fn test_abs() {
-                assert!(abs($f::NAN).is_nan());
+            fn abs() {
+                let this_abs = <$f as Ieee754>::abs;
+                assert!(this_abs($f::NAN).is_nan());
 
                 let cases = [0.0 as $f, -1.0, 1.0001,
                              // denormals
                              $f::recompose_raw(false, 0, 123), $f::recompose(true, 0, 123),
                              $f::NEG_INFINITY, $f::INFINITY];
                 for x in &cases {
-                    assert_eq!(abs(*x), x.abs());
+                    assert_eq!(this_abs(*x), x.abs());
                 }
             }
 
