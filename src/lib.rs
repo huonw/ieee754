@@ -556,6 +556,130 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// # }
     /// ```
     fn abs(self) -> Self;
+
+    /// Return a float with the magnitude of `self` but the sign of
+    /// `sign`.
+    ///
+    /// If `sign` is NaN, this still uses its sign bit, and does not
+    /// (necessarily) return NaN.
+    ///
+    /// # Examples
+    ///
+    /// Single precision:
+    ///
+    /// ```rust
+    /// use std::f32;
+    ///
+    /// use ieee754::Ieee754;
+    ///
+    /// // normal numbers
+    /// assert_eq!(1_f32.copy_sign(1.0), 1.0);
+    /// assert_eq!(2_f32.copy_sign(-1.0), -2.0);
+    /// assert_eq!((-3_f32).copy_sign(1.0), 3.0);
+    /// assert_eq!((-4_f32).copy_sign(-1.0), -4.0);
+    ///
+    /// // infinities
+    /// assert_eq!(5_f32.copy_sign(f32::NEG_INFINITY), -5.0);
+    /// assert_eq!(f32::NEG_INFINITY.copy_sign(1.0), f32::INFINITY);
+    ///
+    /// // signs of zeros matter
+    /// assert_eq!((-6_f32).copy_sign(0.0), 6.0);
+    /// assert_eq!(7_f32.copy_sign(-0.0), -7.0);
+    ///
+    /// // NaNs only propagate on the self argument
+    /// assert!(f32::NAN.copy_sign(1.0).is_nan());
+    /// assert_eq!(8_f32.copy_sign(-f32::NAN), -8.0);
+    /// ```
+    ///
+    /// Double precision:
+    ///
+    /// ```rust
+    /// use std::f64;
+    ///
+    /// use ieee754::Ieee754;
+    ///
+    /// // normal numbers
+    /// assert_eq!(1_f64.copy_sign(1.0), 1.0);
+    /// assert_eq!(2_f64.copy_sign(-1.0), -2.0);
+    /// assert_eq!((-3_f64).copy_sign(1.0), 3.0);
+    /// assert_eq!((-4_f64).copy_sign(-1.0), -4.0);
+    ///
+    /// // infinities
+    /// assert_eq!(5_f64.copy_sign(f64::NEG_INFINITY), -5.0);
+    /// assert_eq!(f64::NEG_INFINITY.copy_sign(1.0), f64::INFINITY);
+    ///
+    /// // signs of zeros matter
+    /// assert_eq!((-6_f64).copy_sign(0.0), 6.0);
+    /// assert_eq!(7_f64.copy_sign(-0.0), -7.0);
+    ///
+    /// // NaNs only propagate on the self argument
+    /// assert!(f64::NAN.copy_sign(1.0).is_nan());
+    /// assert_eq!(8_f64.copy_sign(-f64::NAN), -8.0);
+    /// ```
+    fn copy_sign(self, sign: Self) -> Self;
+
+    /// Return the sign of `x`.
+    ///
+    /// This provides a no_std/core-only function similar to the
+    /// built-in `signum` in `std` (until
+    /// [#50145](https://github.com/rust-lang/rust/issues/50145) is
+    /// addressed). This `sign` function differs at two values; it
+    /// matches the mathematical definitions when `self == 0.0` :
+    ///
+    /// | `x` | `x.signum()` (`std`) | `x.sign()` (`ieee754`) |
+    /// |--:|--:|--:|
+    /// |< 0.0|−1.0|−1.0|
+    /// |−0.0|−1.0|**−0.0**|
+    /// |+0.0|+1.0|**+0.0**|
+    /// |> 0.0|+1.0|+1.0|
+    /// |NaN|NaN|NaN|
+    ///
+    /// # Examples
+    ///
+    /// Single precision:
+    ///
+    /// ```rust
+    /// use std::f32;
+    /// use std::cmp::Ordering;
+    ///
+    /// use ieee754::Ieee754;
+    ///
+    /// // zeros
+    /// assert_eq!(0_f32.sign().total_cmp(&0.0), Ordering::Equal);
+    /// assert_eq!((-0_f32).sign().total_cmp(&-0.0), Ordering::Equal);
+    ///
+    /// // normal numbers
+    /// assert_eq!((12.34_f32).sign(), 1.0);
+    /// assert_eq!((-12.34_f32).sign(), -1.0);
+    ///
+    /// // extremes
+    /// assert_eq!(f32::INFINITY.sign(), 1.0);
+    /// assert_eq!(f32::NEG_INFINITY.sign(), -1.0);
+    /// assert!(f32::NAN.sign().is_nan());
+    /// ```
+    ///
+    /// Double precision:
+    ///
+    /// ```rust
+    /// use std::f64;
+    /// use std::cmp::Ordering;
+    ///
+    /// use ieee754::Ieee754;
+    ///
+    /// // zeros
+    /// assert_eq!(0_f64.sign().total_cmp(&0.0), Ordering::Equal);
+    /// assert_eq!((-0_f64).sign().total_cmp(&-0.0), Ordering::Equal);
+    ///
+    /// // normal numbers
+    /// assert_eq!((12.34_f64).sign(), 1.0);
+    /// assert_eq!((-12.34_f64).sign(), -1.0);
+    ///
+    /// // extremes
+    /// assert_eq!(f64::INFINITY.sign(), 1.0);
+    /// assert_eq!(f64::NEG_INFINITY.sign(), -1.0);
+    /// assert!(f64::NAN.sign().is_nan());
+    /// ```
+    fn sign(self) -> Self;
 }
 
 macro_rules! mask{
@@ -708,6 +832,22 @@ macro_rules! mk_impl {
             fn abs(self) -> Self {
                 let (_, e, s) = self.decompose_raw();
                 Self::recompose_raw(false, e, s)
+            }
+
+            #[inline]
+            fn copy_sign(self, sign: Self) -> Self {
+                let (s, _, _) = sign.decompose_raw();
+                let (_, e, m) = self.decompose_raw();
+                Self::recompose_raw(s, e, m)
+            }
+
+            #[inline]
+            fn sign(self) -> Self {
+                if self == 0.0 || self != self { // is NaN? (.is_nan() added to core in 1.27)
+                    self
+                } else {
+                    1.0.copy_sign(self)
+                }
             }
         }
 
@@ -943,6 +1083,40 @@ macro_rules! mk_impl {
                             computed, expected);
                     }
                 }
+            }
+
+            #[test]
+            fn copy_sign() {
+                let positives = [$f::NAN, $f::INFINITY, 1e10, 1.0, 0.0];
+
+                for &pos in &positives {
+                    assert_eq!((1 as $f).copy_sign(pos), 1.0);
+                    assert_eq!((1 as $f).copy_sign(-pos), -1.0);
+                    assert_eq!((-1 as $f).copy_sign(pos), 1.0);
+                    assert_eq!((-1 as $f).copy_sign(-pos), -1.0);
+
+                    assert_eq!($f::INFINITY.copy_sign(pos), $f::INFINITY);
+                    assert_eq!($f::INFINITY.copy_sign(-pos), $f::NEG_INFINITY);
+                    assert_eq!($f::NEG_INFINITY.copy_sign(pos), $f::INFINITY);
+                    assert_eq!($f::NEG_INFINITY.copy_sign(-pos), $f::NEG_INFINITY);
+
+                    assert!($f::NAN.copy_sign(pos).is_nan());
+                    assert!($f::NAN.copy_sign(-pos).is_nan());
+                }
+            }
+
+            #[test]
+            fn sign() {
+                assert!($f::NAN.sign().is_nan());
+
+                assert_eq!($f::NEG_INFINITY.sign(), -1.0);
+                assert_eq!((-1e10 as $f).sign(), -1.0);
+                assert_eq!((-1.0 as $f).sign(), -1.0);
+                assert_eq!((-0.0 as $f).sign().bits(), (-0.0 as $f).bits());
+                assert_eq!((0.0 as $f).sign().bits(), (0.0 as $f).bits());
+                assert_eq!((1.0 as $f).sign(), 1.0);
+                assert_eq!((1e10 as $f).sign(), 1.0);
+                assert_eq!($f::INFINITY.sign(), 1.0);
             }
         }
     }
