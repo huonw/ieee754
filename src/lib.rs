@@ -680,6 +680,94 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// assert!(f64::NAN.sign().is_nan());
     /// ```
     fn sign(self) -> Self;
+
+    /// Compute the (generalized) **signed** relative error of `self`
+    /// as an approximation to `exact`.
+    ///
+    /// This computes the signed value: positive indicates `self` in
+    /// the opposite direction to 0 from `exact`; negative indicates
+    /// `self` is in the same direction as 0 from `exact`. Use
+    /// `x.rel_error(exact).abs()` to get the non-signed relative
+    /// error.
+    ///
+    /// The "generalized" refers to `exact` being 0 or ±∞ the handling
+    /// of which is designed to indicate a "failure" (infinite error),
+    /// if `self` doesn't precisely equal `exact`. This behaviour is
+    /// designed for checking output of algorithms on floats when it
+    /// is often desirable to match 0.0 and ±∞ perfectly.
+    ///
+    /// The values of this function are:
+    ///
+    /// |`exact`|`x`|`x.rel_error(exact)`|
+    /// |--:|--:|--:|
+    /// |NaN|any value|NaN|
+    /// |any value|NaN|NaN|
+    /// |0|equal to `exact`|0|
+    /// |0|not equal to `exact`|signum(`x`) × ∞|
+    /// |±∞|equal to `exact`|0|
+    /// |±∞|not equal to `exact`|-∞|
+    /// |any other value|any value|`(x - exact) / exact`|
+    ///
+    /// The sign of a zero-valued argument has no effect on the result
+    /// of this function.
+    ///
+    /// # Examples
+    ///
+    /// Single precision:
+    ///
+    /// ```rust
+    /// use std::f32;
+    ///
+    /// use ieee754::Ieee754;
+    ///
+    /// assert_eq!(4_f32.rel_error(4.0), 0.0);
+    /// assert_eq!(3_f32.rel_error(4.0), -0.25);
+    /// assert_eq!(5_f32.rel_error(4.0), 0.25);
+    ///
+    /// // zero
+    /// assert_eq!(0_f32.rel_error(0.0), 0.0);
+    /// assert_eq!(1_f32.rel_error(0.0), f32::INFINITY);
+    /// assert_eq!((-1_f32).rel_error(0.0), f32::NEG_INFINITY);
+    ///
+    /// // infinities
+    /// assert_eq!(f32::INFINITY.rel_error(f32::INFINITY), 0.0);
+    /// assert_eq!(0_f32.rel_error(f32::INFINITY), f32::NEG_INFINITY);
+    ///
+    /// assert_eq!(f32::NEG_INFINITY.rel_error(f32::NEG_INFINITY), 0.0);
+    /// assert_eq!(0_f32.rel_error(f32::NEG_INFINITY), f32::NEG_INFINITY);
+    ///
+    /// // NaNs
+    /// assert!(f32::NAN.rel_error(4.0).is_nan());
+    /// assert!(4_f32.rel_error(f32::NAN).is_nan());
+    /// ```
+    ///
+    /// Double precision:
+    ///
+    /// ```rust
+    /// use std::f64;
+    /// use ieee754::Ieee754;
+    ///
+    /// assert_eq!(4_f64.rel_error(4.0), 0.0);
+    /// assert_eq!(3_f64.rel_error(4.0), -0.25);
+    /// assert_eq!(5_f64.rel_error(4.0), 0.25);
+    ///
+    /// // zero
+    /// assert_eq!(0_f64.rel_error(0.0), 0.0);
+    /// assert_eq!(1_f64.rel_error(0.0), f64::INFINITY);
+    /// assert_eq!((-1_f64).rel_error(0.0), f64::NEG_INFINITY);
+    ///
+    /// // infinities
+    /// assert_eq!(f64::INFINITY.rel_error(f64::INFINITY), 0.0);
+    /// assert_eq!(0_f64.rel_error(f64::INFINITY), f64::NEG_INFINITY);
+    ///
+    /// assert_eq!(f64::NEG_INFINITY.rel_error(f64::NEG_INFINITY), 0.0);
+    /// assert_eq!(0_f64.rel_error(f64::NEG_INFINITY), f64::NEG_INFINITY);
+    ///
+    /// // NaNs
+    /// assert!(f64::NAN.rel_error(4.0).is_nan());
+    /// assert!(4_f64.rel_error(f64::NAN).is_nan());
+    /// ```
+    fn rel_error(self, exact: Self) -> Self;
 }
 
 macro_rules! mask{
@@ -847,6 +935,29 @@ macro_rules! mk_impl {
                     self
                 } else {
                     1.0.copy_sign(self)
+                }
+            }
+
+            #[inline]
+            fn rel_error(self, exact: Self) -> Self {
+                use core::$f;
+                if exact == 0.0 {
+                    if self == 0.0 {
+                        0.0
+                    } else {
+                        self.sign() * $f::INFINITY
+                    }
+                } else if abs(exact) == $f::INFINITY {
+                    if self == exact {
+                        0.0
+                    } else if self != self { // is NaN? (.is_nan() added to core in 1.27)
+                        self
+                    } else {
+                        $f::NEG_INFINITY
+                    }
+                } else {
+                    // NaNs propagate
+                    (self - exact) / exact
                 }
             }
         }
@@ -1117,6 +1228,65 @@ macro_rules! mk_impl {
                 assert_eq!((1.0 as $f).sign(), 1.0);
                 assert_eq!((1e10 as $f).sign(), 1.0);
                 assert_eq!($f::INFINITY.sign(), 1.0);
+            }
+
+            #[test]
+            fn rel_error() {
+                let zer: $f = 0.0;
+                let one: $f = 1.0;
+                let two: $f = 2.0;
+
+                assert_eq!(zer.rel_error(one), -1.0);
+                assert_eq!(one.rel_error(one), 0.0);
+                assert_eq!((-one).rel_error(one), -2.0);
+                assert_eq!(two.rel_error(one), 1.0);
+                assert_eq!((-two).rel_error(one), -3.0);
+
+                assert_eq!(zer.rel_error(-one), -1.0);
+                assert_eq!(one.rel_error(-one), -2.0);
+                assert_eq!((-one).rel_error(-one), 0.0);
+                assert_eq!(two.rel_error(-one), -3.0);
+                assert_eq!((-two).rel_error(-one), 1.0);
+
+                assert_eq!(zer.rel_error(two), -1.0);
+                assert_eq!(one.rel_error(two), -0.5);
+                assert_eq!((-one).rel_error(two), -1.5);
+                assert_eq!(two.rel_error(two), 0.0);
+                assert_eq!((-two).rel_error(two), -2.0);
+
+                assert_eq!(zer.rel_error(-two), -1.0);
+                assert_eq!(one.rel_error(-two), -1.5);
+                assert_eq!((-one).rel_error(-two), -0.5);
+                assert_eq!(two.rel_error(-two), -2.0);
+                assert_eq!((-two).rel_error(-two), 0.0);
+            }
+            #[test]
+            fn rel_error_edge_cases() {
+                let nan = $f::NAN;
+                let inf = $f::INFINITY;
+                let zer: $f = 0.0;
+                let one: $f = 1.0;
+
+                assert!(nan.rel_error(nan).is_nan());
+                assert!(zer.rel_error(nan).is_nan());
+                assert!(nan.rel_error(zer).is_nan());
+
+                assert_eq!(zer.rel_error(zer), 0.0);
+                assert_eq!(zer.rel_error(-zer), 0.0);
+                assert_eq!((-zer).rel_error(zer), 0.0);
+                assert_eq!((-zer).rel_error(-zer), 0.0);
+                assert_eq!(one.rel_error(zer), inf);
+                assert_eq!((-one).rel_error(zer), -inf);
+                assert_eq!(inf.rel_error(zer), inf);
+                assert_eq!((-inf).rel_error(zer), -inf);
+
+
+                assert_eq!(inf.rel_error(inf), 0.0);
+                assert_eq!(inf.rel_error(-inf), -inf);
+                assert_eq!((-inf).rel_error(inf), -inf);
+                assert_eq!((-inf).rel_error(-inf), 0.0);
+                assert_eq!(zer.rel_error(inf), -inf);
+                assert_eq!(zer.rel_error(-inf), -inf);
             }
         }
     }
