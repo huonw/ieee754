@@ -142,12 +142,6 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// ```
     fn next(self) -> Self;
 
-    /// Return the unit-in-the-last-place ulp of `self`. That is,
-    /// `x.abs().next() - x.abs()`, but handling overflow properly.
-    ///
-    /// Returns `None` if `self` is not finite.
-    fn ulp(self) -> Option<Self>;
-
     /// Return the previous value before `self`.
     ///
     /// Calling this on NaN or negative infinity will yield nonsense.
@@ -160,6 +154,61 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// assert_eq!(x.prev(), 0.99999995);
     /// ```
     fn prev(self) -> Self;
+
+    /// Return the unit-in-the-last-place ulp of `self`. That is,
+    /// `x.abs().next() - x.abs()`, but handling overflow properly.
+    ///
+    /// Returns `None` if `self` is not finite.
+    ///
+    /// # Examples
+    ///
+    /// Single precision:
+    ///
+    /// ```rust
+    /// use std::f32;
+    /// use ieee754::Ieee754;
+    ///
+    /// assert_eq!(0_f32.ulp(), Some(1.4e-45));
+    ///
+    /// assert_eq!(1_f32.ulp(), Some(1.1920928955078125e-07));
+    /// assert_eq!((-1_f32).ulp(), Some(1.1920928955078125e-07));
+    ///
+    /// // 2^23
+    /// assert_eq!(8_388_608_f32.ulp(), Some(1.0));
+    /// // 2^24 - 1, the largest f32 with ULP 1
+    /// assert_eq!(16_777_215_f32.ulp(), Some(1.0));
+    /// // 2^24
+    /// assert_eq!(16_777_216_f32.ulp(), Some(2.0));
+    ///
+    /// // non-finite
+    /// assert_eq!(f32::INFINITY.ulp(), None);
+    /// assert_eq!(f32::NAN.ulp(), None);
+    /// ```
+    ///
+    /// Double precision:
+    ///
+    /// ```rust
+    /// use std::f64;
+    /// use ieee754::Ieee754;
+    ///
+    /// assert_eq!(0_f64.ulp(), Some(4.9e-324));
+    ///
+    /// assert_eq!(1_f64.ulp(), Some(2.220446049250313e-16));
+    /// assert_eq!((-1_f64).ulp(), Some(2.220446049250313e-16));
+    ///
+    /// // 2^52
+    /// assert_eq!(4_503_599_627_370_496_f64.ulp(), Some(1.0));
+    /// // 2^53 - 1, the largest f64 with ULP 1
+    /// assert_eq!(9_007_199_254_740_991_f64.ulp(), Some(1.0));
+    /// // 2^53
+    /// assert_eq!(9_007_199_254_740_992_f64.ulp(), Some(2.0));
+    ///
+    /// // non-finite
+    /// assert_eq!(f64::INFINITY.ulp(), None);
+    /// assert_eq!(f64::NAN.ulp(), None);
+    /// ```
+    fn ulp(self) -> Option<Self>;
+
     /// View `self` as a collection of bits.
     ///
     /// # Examples
@@ -170,6 +219,7 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// assert_eq!(x.bits(), 0x3f80_0000);
     /// ```
     fn bits(self) -> Self::Bits;
+
     /// View a collections of bits as a floating point number.
     ///
     /// # Examples
@@ -180,6 +230,7 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// assert_eq!(float, -1.0);
     /// ```
     fn from_bits(x: Self::Bits) -> Self;
+
     /// Get the bias of the stored exponent.
     ///
     /// # Examples
@@ -191,6 +242,7 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// assert_eq!(f64::exponent_bias(), 1023);
     /// ```
     fn exponent_bias() -> Self::Exponent;
+
     /// Break `self` into the three constituent parts of an IEEE754 float.
     ///
     /// The exponent returned is the raw bits, use `exponent_bias` to
@@ -236,8 +288,17 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
 
     /// Create a `Self` out of the three constituent parts of an IEEE754 float.
     ///
-    /// The exponent should be the raw bits, use `exponent_bias` to
-    /// compute the offset required, or use `recompose` to feed in the
+    /// This returns (-1)<sup><code>sign</code></sup> ×
+    /// 1.<code>signif</code> × 2<sup><code>expn</code> - bias</sup>, where
+    ///
+    /// - `sign` is treated as if `true` == `1` (meaning `true` is
+    ///   negative),
+    /// - 1.<code>signif</code> refers to placing the bits of `signif`
+    ///   as the fractional part of a number between 1 and 2, and
+    /// - bias is the exponent bias for this float (see [`exponent_bias`]).
+    ///
+    /// The exponent should be the raw bits: use `exponent_bias` to
+    /// compute the offset required, or use `recompose` to feed in an
     /// unbiased exponent.
     ///
     /// # Examples
@@ -317,9 +378,17 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
 
     /// Create a `Self` out of the three constituent parts of an IEEE754 float.
     ///
-    /// The exponent should be true exponent, not accounting for any
+    /// This returns (-1)<sup><code>sign</code></sup> ×
+    /// 1.<code>signif</code> × 2<sup><code>expn</code></sup>, where
+    ///
+    /// - `sign` is treated as if `true` == `1` (meaning `true` is
+    ///   negative), and
+    /// - 1.<code>signif</code> refers to placing the bits of `signif`
+    ///   as the fractional part of a number between 1 and 2.
+    ///
+    /// The exponent should be the true exponent, not accounting for any
     /// bias. The significand should not include the implicit highest
-    /// bit (if it exists), e.g. the 24-th bit for signle precision.
+    /// bit (if it exists), e.g. the 24-th bit for single precision.
     ///
     /// # Examples
     ///
@@ -328,12 +397,15 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// ```rust
     /// use ieee754::Ieee754;
     ///
+    /// // normal numbers
     /// assert_eq!(f32::recompose(false, 0, 0), 1.0);
     /// assert_eq!(f32::recompose(false, 10, 0x1a5225), 1234.567);
     /// assert_eq!(f32::recompose(true, -1, 0x66666), -0.525);
     ///
+    /// // infinity
     /// assert_eq!(f32::recompose(false, 128, 0), std::f32::INFINITY);
     ///
+    /// // NaN
     /// assert!(f32::recompose(false, 128, 1).is_nan());
     /// ```
     ///
@@ -342,12 +414,15 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     /// ```rust
     /// use ieee754::Ieee754;
     ///
+    /// // normal numbers
     /// assert_eq!(f64::recompose(false, 0, 0), 1.0);
     /// assert_eq!(f64::recompose(false, 10, 0x34a449ba5e354), 1234.567);
     /// assert_eq!(f64::recompose(true, -1, 0xcccc_cccc_cccd), -0.525);
     ///
+    /// // infinity
     /// assert_eq!(f64::recompose(false, 1024, 0), std::f64::INFINITY);
     ///
+    /// // NaN
     /// assert!(f64::recompose(false, 1024, 1).is_nan());
     /// ```
     fn recompose(sign: bool, expn: Self::Exponent, signif: Self::Significand) -> Self;
@@ -368,6 +443,21 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     ///
     /// # Examples
     ///
+    /// Sorting:
+    ///
+    /// ```rust
+    /// use std::f32;
+    ///
+    /// use ieee754::Ieee754;
+    ///
+    /// let mut data = vec![0.0, f32::NEG_INFINITY, -1.0, f32::INFINITY,
+    ///                     f32::NAN, -0.0, 12.34e5, -f32::NAN];
+    /// data.sort_by(|a, b| a.total_cmp(b));
+    ///
+    /// assert_eq!(format!("{:.0?}", data),
+    ///            "[NaN, -inf, -1, -0, 0, 1234000, inf, NaN]");
+    /// ```
+    ///
     /// Single precision:
     ///
     /// ```rust
@@ -376,10 +466,15 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     ///
     /// use ieee754::Ieee754;
     ///
+    /// // normal comparison
     /// assert_eq!(0_f32.total_cmp(&0_f32), Ordering::Equal);
-    /// assert_eq!(0_f32.total_cmp(&-0_f32), Ordering::Greater);
     /// assert_eq!(0_f32.total_cmp(&1_f32), Ordering::Less);
     /// assert_eq!(1e10_f32.total_cmp(&f32::NEG_INFINITY), Ordering::Greater);
+    ///
+    /// // signed zero
+    /// assert_eq!(0_f32.total_cmp(&-0_f32), Ordering::Greater);
+    ///
+    /// // NaNs
     /// assert_eq!(f32::NAN.total_cmp(&0_f32), Ordering::Greater);
     /// assert_eq!(f32::NAN.total_cmp(&f32::INFINITY), Ordering::Greater);
     /// assert_eq!((-f32::NAN).total_cmp(&f32::NEG_INFINITY), Ordering::Less);
@@ -393,10 +488,15 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd {
     ///
     /// use ieee754::Ieee754;
     ///
+    /// // normal comparison
     /// assert_eq!(0_f64.total_cmp(&0_f64), Ordering::Equal);
-    /// assert_eq!(0_f64.total_cmp(&-0_f64), Ordering::Greater);
     /// assert_eq!(0_f64.total_cmp(&1_f64), Ordering::Less);
     /// assert_eq!(1e10_f64.total_cmp(&f64::NEG_INFINITY), Ordering::Greater);
+    ///
+    /// // signed zero
+    /// assert_eq!(0_f64.total_cmp(&-0_f64), Ordering::Greater);
+    ///
+    /// // NaNs
     /// assert_eq!(f64::NAN.total_cmp(&0_f64), Ordering::Greater);
     /// assert_eq!(f64::NAN.total_cmp(&f64::INFINITY), Ordering::Greater);
     /// assert_eq!((-f64::NAN).total_cmp(&f64::NEG_INFINITY), Ordering::Less);
