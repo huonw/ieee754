@@ -1,7 +1,9 @@
 use core::usize;
+use core::fmt;
 use {Bits, Ieee754};
 
 /// An iterator over floating point numbers, created by `Ieee754::upto`.
+#[derive(Clone, Eq, PartialEq)]
 pub struct Iter<T: Ieee754> {
     from: T::Bits,
     to: T::Bits,
@@ -85,5 +87,18 @@ impl<T: Ieee754> DoubleEndedIterator for Iter<T> {
             self.done = true
         }
         return Some(T::from_bits(ret))
+    }
+}
+
+impl<T: Ieee754 + fmt::Debug> fmt::Debug for Iter<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut dbg = f.debug_struct("Iter");
+        if self.done {
+            dbg.field("done", &true);
+        } else {
+            dbg.field("from", &T::from_bits(self.from))
+                .field("to", &T::from_bits(self.to));
+        }
+        dbg.finish()
     }
 }

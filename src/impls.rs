@@ -263,6 +263,36 @@ macro_rules! mk_impl {
             }
 
             #[test]
+            fn upto_fmt() {
+                fn test(from: $f, to: $f) {
+                    let mut iter = from.upto(to);
+                    assert_eq!(format!("{:?}", iter),
+                               format!("Iter {{ from: {:?}, to: {:?} }}",
+                                       from, to));
+
+                    if from.next() < to.prev() {
+                        let _ = iter.next();
+                        let _ = iter.next_back();
+                        assert_eq!(format!("{:?}", iter),
+                                   format!("Iter {{ from: {:?}, to: {:?} }}",
+                                           from.next(), to.prev()));
+                    }
+
+                    if iter.size_hint().0 < 1_000_000 {
+                        iter.by_ref().for_each(|_| {});
+                        assert_eq!(format!("{:?}", iter),
+                                   "Iter { done: true }");
+                    }
+                }
+
+                test(0.0, 1.0);
+                test(-1.0, 1.0);
+                test(0.0, (0.0 as $f).next().next());
+                test(1e30, (1e30 as $f).next().next().next());
+                test($f::NEG_INFINITY, $f::INFINITY);
+            }
+
+            #[test]
             fn next_prev_order() {
                 let cases = [0.0 as $f, -0.0, 1.0, 1.0001, 1e30, -1.0, -1.0001, -1e30];
                 for &x in &cases {
