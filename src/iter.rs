@@ -1,14 +1,14 @@
-use core::{mem, usize};
+use core::usize;
 use {Bits, Ieee754};
 
 /// An iterator over floating point numbers, created by `Ieee754::upto`.
 pub struct Iter<T: Ieee754> {
-    from: T,
-    to: T,
+    from: T::Bits,
+    to: T::Bits,
     done: bool
 }
 pub fn new_iter<T: Ieee754>(from: T, to: T) -> Iter<T> {
-    Iter { from, to, done: false }
+    Iter { from: from.bits(), to: to.bits(), done: false }
 }
 
 impl<T: Ieee754> Iterator for Iter<T> {
@@ -16,16 +16,27 @@ impl<T: Ieee754> Iterator for Iter<T> {
     fn next(&mut self) -> Option<T> {
         if self.done { return None }
 
-        let x = self.from;
-        let y = x.next();
-        // we've canonicalised negative zero to positive zero, and
-        // we're guaranteed that neither is NaN, so comparing bitwise
-        // is valid (and 20% faster for the `all` example).
-        if x.bits() == self.to.bits() {
+        let ret = self.from;
+        self.from = match ret.high() {
+            // sign true => negative => the bit representation needs
+            // to go down
+            true => {
+                let prev = ret.prev();
+                if prev.is_imin() {
+                    prev.flip_high()
+                } else {
+                    prev
+                }
+            }
+            // sign false => positive => the bit representation needs
+            // to go up
+            false => ret.next()
+        };
+
+        if ret == self.to {
             self.done = true;
         }
-        self.from = y;
-        return Some(x)
+        return Some(T::from_bits(ret))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -33,19 +44,20 @@ impl<T: Ieee754> Iterator for Iter<T> {
             return (0, Some(0))
         }
 
-        let high_pos = 8 * mem::size_of::<T>() - 1;
-        let high_mask = 1 << high_pos;
+        fn position<B: Bits>(x: B) -> i64 {
+            let sign = x.high();
+            let abs = x.clear_high().as_u64() as i64;
+            if sign {
+                -abs
+            } else {
+                abs
+            }
+        }
 
-        let from_ = self.from.bits().as_u64();
-        let (from, from_sign) = (from_ & !high_mask,
-                                 from_ & high_mask != 0);
-        let to_ = self.to.bits().as_u64();
-        let (to, to_sign) = (to_ & !high_mask,
-                             to_ & high_mask != 0);
-        let from = if from_sign { -(from as i64) } else { from as i64 };
-        let to = if to_sign { -(to as i64) } else { to as i64 };
+        let from_key = position(self.from);
+        let to_key = position(self.to);
 
-        let distance = (to - from + 1) as u64;
+        let distance = (to_key - from_key + 1) as u64;
         if distance <= usize::MAX as u64 {
             let d = distance as usize;
             (d, Some(d))
@@ -58,12 +70,20 @@ impl<T: Ieee754> DoubleEndedIterator for Iter<T> {
     fn next_back(&mut self) -> Option<T> {
         if self.done { return None }
 
-        let x = self.to;
-        let y = x.prev();
-        if x == self.from {
-            self.done = true;
+        let ret = self.to;
+        self.to = if ret.high() {
+            ret.next()
+        } else {
+            if ret.is_zero() {
+                ret.flip_high().next()
+            } else {
+                ret.prev()
+            }
+        };
+
+        if ret == self.from {
+            self.done = true
         }
-        self.to = y;
-        return Some(x)
+        return Some(T::from_bits(ret))
     }
 }
