@@ -4,12 +4,75 @@ use Iter;
 
 pub trait Bits: Eq + PartialEq + PartialOrd + Ord + Copy {
     fn as_u64(self) -> u64;
+
+    fn high(self) -> bool;
+    fn is_zero(self) -> bool;
+    fn is_imin(self) -> bool;
+    fn clear_high(self) -> Self;
+    fn flip_high(self) -> Self;
+
+    fn next(self) -> Self;
+    fn prev(self) -> Self;
 }
 impl Bits for u32 {
+    #[inline]
     fn as_u64(self) -> u64 { self as u64 }
+
+    #[inline]
+    fn high(self) -> bool {
+        self & (1 << 31) != 0
+    }
+    #[inline]
+    fn is_zero(self) -> bool {
+        self == 0
+    }
+    #[inline]
+    fn is_imin(self) -> bool {
+        self == 1 << 31
+    }
+    #[inline]
+    fn clear_high(self) -> Self {
+        self & !(1 << 31)
+    }
+    #[inline]
+    fn flip_high(self) -> Self {
+        self ^ (1 << 31)
+    }
+
+    #[inline]
+    fn next(self) -> Self { self + 1 }
+    #[inline]
+    fn prev(self) -> Self { self - 1 }
 }
 impl Bits for u64 {
+    #[inline]
     fn as_u64(self) -> u64 { self }
+
+    #[inline]
+    fn high(self) -> bool {
+        self & (1 << 63) != 0
+    }
+    #[inline]
+    fn is_zero(self) -> bool {
+        self == 0
+    }
+    #[inline]
+    fn is_imin(self) -> bool {
+        self == 1 << 63
+    }
+    #[inline]
+    fn clear_high(self) -> Self {
+        self & !(1 << 63)
+    }
+    #[inline]
+    fn flip_high(self) -> Self {
+        self ^ (1 << 63)
+    }
+
+    #[inline]
+    fn next(self) -> Self { self + 1 }
+    #[inline]
+    fn prev(self) -> Self { self - 1 }
 }
 
 /// Types that are IEEE754 floating point numbers.
