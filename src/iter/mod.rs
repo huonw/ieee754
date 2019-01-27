@@ -4,6 +4,9 @@ use core::fmt;
 use core::ops::Try;
 use {Bits, Ieee754};
 
+#[cfg(feature = "rayon")]
+mod rayon;
+
 /// An iterator over floating point numbers, created by `Ieee754::upto`.
 #[derive(Clone, Eq, PartialEq)]
 pub struct Iter<T: Ieee754> {
