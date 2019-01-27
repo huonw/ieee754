@@ -1,3 +1,4 @@
+use core::ops::Try;
 use core::usize;
 use {Bits, Ieee754};
 
@@ -22,7 +23,7 @@ impl<T: Ieee754> Iterator for Iter<T> {
             // to go down
             true => {
                 let prev = ret.prev();
-                if prev.is_imin() {
+                if prev == T::Bits::imin() {
                     prev.flip_high()
                 } else {
                     prev
@@ -37,6 +38,54 @@ impl<T: Ieee754> Iterator for Iter<T> {
             self.done = true;
         }
         return Some(T::from_bits(ret))
+    }
+
+    fn try_fold<B, F, R>(&mut self, init: B, mut f: F) -> R
+    where F: FnMut(B, Self::Item) -> R, R: Try<Ok = B>
+    {
+        let mut value = init;
+        if !self.done {
+            let negative = self.from.high();
+            let positive = !self.to.high();
+            if negative {
+                let end = if positive {
+                    T::Bits::imin().next()
+                } else {
+                    self.to
+                };
+
+                while self.from != end {
+                    let float = T::from_bits(self.from);
+                    self.from = self.from.prev();
+                    value = f(value, float)?;
+                }
+
+                if positive {
+                    let float = T::from_bits(self.from);
+                    self.from = self.from.prev().flip_high();
+                    value = f(value, float)?;
+                } else {
+                    let float = T::from_bits(self.from);
+                    self.from = self.from.prev();
+                    self.done = true;
+                    value = f(value, float)?;
+                }
+            }
+            if positive {
+                debug_assert!(!self.from.high());
+                while self.from != self.to {
+                    let float = T::from_bits(self.from);
+                    self.from = self.from.next();
+                    value = f(value, float)?;
+                }
+
+                let float = T::from_bits(self.from);
+                self.from = self.from.next();
+                self.done = true;
+                value = f(value, float)?;
+            }
+        }
+        R::from_ok(value)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -74,7 +123,7 @@ impl<T: Ieee754> DoubleEndedIterator for Iter<T> {
         self.to = if ret.high() {
             ret.next()
         } else {
-            if ret.is_zero() {
+            if ret == T::Bits::zero() {
                 ret.flip_high().next()
             } else {
                 ret.prev()
@@ -85,5 +134,53 @@ impl<T: Ieee754> DoubleEndedIterator for Iter<T> {
             self.done = true
         }
         return Some(T::from_bits(ret))
+    }
+
+    fn try_rfold<B, F, R>(&mut self, init: B, mut f: F) -> R
+    where F: FnMut(B, Self::Item) -> R, R: Try<Ok = B>
+    {
+        let mut value = init;
+        if !self.done {
+            let negative = self.from.high();
+            let positive = !self.to.high();
+            if positive {
+                let end = if negative {
+                    T::Bits::zero()
+                } else {
+                    self.from
+                };
+
+                while self.to != end {
+                    let float = T::from_bits(self.to);
+                    self.to = self.to.prev();
+                    value = f(value, float)?;
+                }
+
+                if negative {
+                    let float = T::from_bits(self.to);
+                    self.to = self.to.flip_high().next();
+                    value = f(value, float)?;
+                } else {
+                    let float = T::from_bits(self.to);
+                    self.to = self.to.prev();
+                    self.done = true;
+                    value = f(value, float)?;
+                }
+            }
+            if negative {
+                debug_assert!(self.to.high());
+                while self.from != self.to {
+                    let float = T::from_bits(self.to);
+                    self.to = self.to.next();
+                    value = f(value, float)?;
+                }
+
+                let float = T::from_bits(self.to);
+                self.to = self.to.prev();
+                self.done = true;
+                value = f(value, float)?;
+            }
+        }
+        R::from_ok(value)
     }
 }

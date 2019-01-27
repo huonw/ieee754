@@ -5,9 +5,9 @@ use Iter;
 pub trait Bits: Eq + PartialEq + PartialOrd + Ord + Copy {
     fn as_u64(self) -> u64;
 
+    fn zero() -> Self;
+    fn imin() -> Self;
     fn high(self) -> bool;
-    fn is_zero(self) -> bool;
-    fn is_imin(self) -> bool;
     fn clear_high(self) -> Self;
     fn flip_high(self) -> Self;
 
@@ -19,16 +19,16 @@ impl Bits for u32 {
     fn as_u64(self) -> u64 { self as u64 }
 
     #[inline]
+    fn zero() -> Self {
+        0
+    }
+    #[inline]
+    fn imin() -> Self {
+        1 << 31
+    }
+    #[inline]
     fn high(self) -> bool {
         self & (1 << 31) != 0
-    }
-    #[inline]
-    fn is_zero(self) -> bool {
-        self == 0
-    }
-    #[inline]
-    fn is_imin(self) -> bool {
-        self == 1 << 31
     }
     #[inline]
     fn clear_high(self) -> Self {
@@ -49,16 +49,16 @@ impl Bits for u64 {
     fn as_u64(self) -> u64 { self }
 
     #[inline]
+    fn zero() -> Self {
+        0
+    }
+    #[inline]
+    fn imin() -> Self {
+        1 << 63
+    }
+    #[inline]
     fn high(self) -> bool {
         self & (1 << 63) != 0
-    }
-    #[inline]
-    fn is_zero(self) -> bool {
-        self == 0
-    }
-    #[inline]
-    fn is_imin(self) -> bool {
-        self == 1 << 63
     }
     #[inline]
     fn clear_high(self) -> Self {

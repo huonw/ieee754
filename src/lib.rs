@@ -20,6 +20,7 @@
 //! ```
 
 #![no_std]
+#![feature(try_trait)]
 #[cfg(test)] #[macro_use] extern crate std;
 
 mod iter;
