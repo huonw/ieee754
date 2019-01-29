@@ -5,10 +5,10 @@ use core::ops::Try;
 use {Bits, Ieee754};
 
 #[cfg(feature = "rayon")]
-mod rayon;
+pub mod rayon;
 
 /// An iterator over floating point numbers, created by `Ieee754::upto`.
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone)]
 pub struct Iter<T: Ieee754> {
     neg: SingleSignIter<T, Negative>,
     pos: SingleSignIter<T, Positive>
@@ -113,6 +113,18 @@ impl<T: Ieee754> DoubleEndedIterator for Iter<T> {
     }
 }
 
+// equal if they would iterate the same elements, even if the precise
+// stored values are different.
+impl<T: Ieee754> PartialEq for Iter<T> {
+    fn eq(&self, other: &Self) -> bool {
+        let mut self_ = self.clone();
+        let mut other_ = other.clone();
+
+        self_.next() == other_.next() && self_.next_back() == other_.next_back()
+    }
+}
+impl<T: Ieee754> Eq for Iter<T> {}
+
 impl<T: Ieee754 + fmt::Debug> fmt::Debug for Iter<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut dbg = f.debug_struct("Iter");
@@ -145,9 +157,9 @@ trait Sign {
     fn dist<B: Bits>(from: B, to: B) -> u64;
 
 }
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 struct Positive;
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 struct Negative;
 
 impl Sign for Positive {
@@ -168,7 +180,7 @@ impl Sign for Negative {
     }
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 struct SingleSignIter<T: Ieee754, S: Sign> {
     from: T::Bits,
     to: T::Bits,
