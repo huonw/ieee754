@@ -11,10 +11,16 @@ if [ ! -z "$TARGET" ]; then
 fi
 
 $cargo build -v $target_param
+
+if [  "$TRAVIS_RUST_VERSION" = "1.23.0" ]; then
+    # testing requires building dev-deps, which require a newer Rust.
+    exit 0
+fi
+
 $cargo test -v $target_param
 
 # for now, `cross bench` is broken https://github.com/rust-embedded/cross/issues/239
-if [ "$cargo" != "cross" -a "$TRAVIS_RUST_VERSION" != "1.23.0" ]; then
+if [ "$cargo" != "cross" ]; then
     $cargo bench -v $target_param -- --test # don't actually record numbers
 fi
 
