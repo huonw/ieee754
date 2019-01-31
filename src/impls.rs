@@ -383,8 +383,10 @@ macro_rules! mk_impl {
                 // Linux (using `cross` on Travis CI), so we can't
                 // include them.
                 let include_snan = cfg!(not(target_arch = "x86"));
+
+                fn neg(x: $f) -> $f { x.copy_sign(-1.0) }
                 // -qNaN
-                let mut cases = vec![-qnanlarge, -qnan1, -qnan0];
+                let mut cases = vec![neg(qnanlarge), neg(qnan1), neg(qnan0)];
                 // -sNaN
                 if include_snan {
                     cases.extend_from_slice(&[-snanlarge, -snan2, -snan1]);
@@ -423,18 +425,23 @@ macro_rules! mk_impl {
                 let positives = [$f::NAN, $f::INFINITY, 1e10, 1.0, 0.0];
 
                 for &pos in &positives {
+                    // CI fails on i686 in debug mode if we do
+                    // arithmetic directly on NaN: the result is
+                    // normalized to qNaN(0).
+                    let neg = if pos.is_nan() { -$f::NAN } else { -pos };
+
                     assert_eq!((1 as $f).copy_sign(pos), 1.0);
-                    assert_eq!((1 as $f).copy_sign(-pos), -1.0);
+                    assert_eq!((1 as $f).copy_sign(neg), -1.0);
                     assert_eq!((-1 as $f).copy_sign(pos), 1.0);
-                    assert_eq!((-1 as $f).copy_sign(-pos), -1.0);
+                    assert_eq!((-1 as $f).copy_sign(neg), -1.0);
 
                     assert_eq!($f::INFINITY.copy_sign(pos), $f::INFINITY);
-                    assert_eq!($f::INFINITY.copy_sign(-pos), $f::NEG_INFINITY);
+                    assert_eq!($f::INFINITY.copy_sign(neg), $f::NEG_INFINITY);
                     assert_eq!($f::NEG_INFINITY.copy_sign(pos), $f::INFINITY);
-                    assert_eq!($f::NEG_INFINITY.copy_sign(-pos), $f::NEG_INFINITY);
+                    assert_eq!($f::NEG_INFINITY.copy_sign(neg), $f::NEG_INFINITY);
 
                     assert!($f::NAN.copy_sign(pos).is_nan());
-                    assert!($f::NAN.copy_sign(-pos).is_nan());
+                    assert!($f::NAN.copy_sign(neg).is_nan());
                 }
             }
 
