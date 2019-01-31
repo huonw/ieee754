@@ -1,6 +1,6 @@
 # `ieee754`
 
-[![Build Status](https://travis-ci.org/huonw/ieee754.png)](https://travis-ci.org/huonw/ieee754) [![codecov](https://codecov.io/gh/huonw/ieee754/branch/master/graph/badge.svg)](https://codecov.io/gh/huonw/ieee754)
+[![Build Status](https://travis-ci.org/huonw/ieee754.svg?branch=master)](https://travis-ci.org/huonw/ieee754) [![codecov](https://codecov.io/gh/huonw/ieee754/branch/master/graph/badge.svg)](https://codecov.io/gh/huonw/ieee754)
 
 Low-level manipulations of IEEE754 floating-point numbers.
 
