@@ -187,52 +187,122 @@ macro_rules! mk_impl {
         #[cfg(test)]
         mod $f {
             use std::prelude::v1::*;
-            use std::$f;
+            use std::{$f, usize};
 
             use {Ieee754};
+
+            // test both `next`, and any potential internal-iteration
+            // optimisations that the iterators support (which will
+            // almost certainly be exhibited via `fold`)
+            fn count_nexts<I: Iterator>(mut it: I) -> usize {
+                let mut i = 0;
+                while let Some(_) = it.next() { i += 1 }
+                i
+            }
+            fn count_fold<I: Iterator>(it: I) -> usize {
+                it.fold(0, |i, _| i + 1)
+            }
+            fn count<I: Iterator + Clone>(it: I) -> usize {
+                let nexts = count_nexts(it.clone());
+                let fold = count_fold(it.clone());
+                let count = it.count();
+                // check they all match
+                assert_eq!(nexts, fold);
+                assert_eq!(fold, count);
+                count
+            }
+
+            fn collect_nexts<I: Iterator>(mut it: I) -> Vec<I::Item> {
+                let mut v = vec![];
+                while let Some(x) = it.next() {
+                    v.push(x);
+                }
+                v
+            }
+            fn collect_fold<I: Iterator>(it: I) -> Vec<I::Item> {
+                it.fold(vec![], |mut v, x| { v.push(x); v })
+            }
+            fn collect<I: Iterator<Item = $f> + Clone>(it: I) -> Vec<$f> {
+                let nexts = collect_nexts(it.clone());
+                let fold = collect_fold(it.clone());
+                let collect = it.collect::<Vec<_>>();
+                // check they all match
+                assert_eq!(nexts, fold);
+                assert_eq!(fold, collect);
+                collect
+            }
+
             #[test]
             fn upto() {
-                assert_eq!((0.0 as $f).upto(0.0).collect::<Vec<_>>(),
+                assert_eq!(collect((0.0 as $f).upto(0.0)),
                            &[0.0]);
-                assert_eq!($f::recompose(false, 1, 1).upto($f::recompose(false, 1, 10)).count(),
+                assert_eq!(count($f::recompose(false, 1, 1).upto($f::recompose(false, 1, 10))),
                            10);
 
-                assert_eq!($f::recompose(true, -$f::exponent_bias(), 10)
-                           .upto($f::recompose(false, -$f::exponent_bias(), 10)).count(),
+                assert_eq!(count($f::recompose(true, -$f::exponent_bias(), 10)
+                                 .upto($f::recompose(false, -$f::exponent_bias(), 10))),
                            21);
             }
             #[test]
             fn upto_rev() {
-                assert_eq!(0.0_f32.upto(0.0_f32).rev().collect::<Vec<_>>(),
+                assert_eq!(collect((0.0 as $f).upto(0.0).rev()),
                            &[0.0]);
 
-                assert_eq!($f::recompose(false, 1, 1)
-                           .upto($f::recompose(false, 1, 10)).rev().count(),
+                assert_eq!(count($f::recompose(false, 1, 1)
+                                 .upto($f::recompose(false, 1, 10)).rev()),
                            10);
-                assert_eq!($f::recompose(true, -$f::exponent_bias(), 10)
-                           .upto($f::recompose(false, -$f::exponent_bias(), 10)).rev().count(),
+                assert_eq!(count($f::recompose(true, -$f::exponent_bias(), 10)
+                                 .upto($f::recompose(false, -$f::exponent_bias(), 10)).rev()),
                            21);
             }
 
             #[test]
             fn upto_infinities() {
                 use std::$f as f;
-                assert_eq!(f::MAX.upto(f::INFINITY).collect::<Vec<_>>(),
+                assert_eq!(collect(f::MAX.upto(f::INFINITY)),
                            &[f::MAX, f::INFINITY]);
-                assert_eq!(f::NEG_INFINITY.upto(f::MIN).collect::<Vec<_>>(),
+                assert_eq!(collect(f::NEG_INFINITY.upto(f::MIN)),
                            &[f::NEG_INFINITY, f::MIN]);
             }
             #[test]
             fn upto_infinities_rev() {
                 use std::$f as f;
-                assert_eq!(f::MAX.upto(f::INFINITY).rev().collect::<Vec<_>>(),
+                assert_eq!(collect(f::MAX.upto(f::INFINITY).rev()),
                            &[f::INFINITY, f::MAX]);
-                assert_eq!(f::NEG_INFINITY.upto(f::MIN).rev().collect::<Vec<_>>(),
+                assert_eq!(collect(f::NEG_INFINITY.upto(f::MIN).rev()),
                            &[f::MIN, f::NEG_INFINITY]);
             }
 
             #[test]
-            fn upto_size_hint() {
+            fn upto_size_hint_table() {
+                let signs = 2;
+                let finite_expns = (1 << $expn_n) - 1;
+                let subone_expns = (1 << ($expn_n - 1)) - 1;
+                let per_binade = 1u64 << $signif_n;
+                let table: &[($f, $f, u64)] = &[
+                    (0.0, 1.0, subone_expns * per_binade + /* +1: */ 1),
+                    (-1.0, 0.0, subone_expns * per_binade + /* -1: */ 1),
+                    (2.0, 4.0, per_binade + /* +4: */ 1),
+                    (-4.0, -2.0, per_binade + /* -2: */ 1),
+                    (-1.0, 1.0,
+                     signs * subone_expns * per_binade + /* +/-1: */ 2 - /* -0: */1),
+                    ($f::NEG_INFINITY, $f::INFINITY,
+                     signs * finite_expns * per_binade + /* +/-inf: */ 2 - /* -0: */ 1)
+                ];
+
+                for &(low, hi, count) in table.iter() {
+                    let hint = low.upto(hi).size_hint();
+                    if count > usize::MAX as u64 {
+                        assert_eq!(hint, (usize::MAX, None), "{:?}->{:?}", low, hi);
+                    } else {
+                        let count = count as usize;
+                        assert_eq!(hint, (count, Some(count)), "{:?}->{:?}", low, hi);
+                    }
+                }
+            }
+
+            #[test]
+            fn upto_size_hint_iterate() {
                 let mut iter =
                     $f::recompose(true, -$f::exponent_bias(), 10)
                     .upto($f::recompose(false, -$f::exponent_bias(), 10));
