@@ -5,12 +5,21 @@ use {Bits, Ieee754};
 /// An iterator over floating point numbers, created by `Ieee754::upto`.
 #[derive(Clone, Eq, PartialEq)]
 pub struct Iter<T: Ieee754> {
+    // the (current) first element of the iterator
     from: T::Bits,
-    to: T::Bits,
-    done: bool
+    // the current one-past-the-last element (this is an exclusive
+    // range, internally)
+    to: T::Bits
 }
+/// Create an iterator over the floating point values in [from, to]
+/// (inclusive!)
 pub fn new_iter<T: Ieee754>(from: T, to: T) -> Iter<T> {
-    Iter { from: from.bits(), to: to.bits(), done: false }
+    assert!(from <= to);
+
+    Iter {
+        from: from.bits(),
+        to: Iter::to_exclusive(to),
+    }
 }
 
 fn u64_to_size_hint(x: u64) -> (usize, Option<usize>) {
@@ -23,24 +32,45 @@ fn u64_to_size_hint(x: u64) -> (usize, Option<usize>) {
 }
 
 impl<T: Ieee754> Iter<T> {
+    fn to_exclusive(to: T) -> T::Bits {
+        let to_bits = to.bits();
+        // step to one after, so the range is exclusive like [from, to),
+        // which leads to a slightly more efficient implementation
+        if to.decompose().0 {
+            to_bits.prev()
+        } else {
+            to_bits.next()
+        }
+    }
+    fn to_inclusive(&self) -> T {
+        let end = if self.to.next().high() {
+            self.to.next()
+        } else {
+            self.to.prev()
+        };
+
+        T::from_bits(end)
+    }
     fn len(&self) -> u64 {
         let (neg, pos) = self.split_by_sign();
         neg.len() + pos.len()
     }
 
+    fn done(&self) -> bool { self.from == self.to }
+
     fn split_by_sign(&self) -> (SingleSignIter<T, Negative>, SingleSignIter<T, Positive>) {
-        let negative = !self.done && self.from.high();
-        let positive = !self.done && !self.to.high();
+        let negative = !self.done() && self.from.high();
+        let positive = !self.done() && !self.to.high();
 
         let neg_start = self.from;
-        let pos_end = self.to.next();
+        let pos_end = self.to;
 
         let (neg_end, pos_start) = match (negative, positive) {
             (true, true) => (T::Bits::imin(), T::Bits::zero()),
             // self is a range with just one sign, so one side is
             // empty (has start == end)
             (false, true) => (neg_start, self.from),
-            (true, false) => (self.to.prev(), pos_end),
+            (true, false) => (self.to, pos_end),
             // self is done, so both sides are empty
             (false, false) => (neg_start, pos_end),
         };
@@ -55,7 +85,7 @@ impl<T: Ieee754> Iter<T> {
 impl<T: Ieee754> Iterator for Iter<T> {
     type Item = T;
     fn next(&mut self) -> Option<T> {
-        if self.done { return None }
+        if self.done() { return None }
 
         let ret = self.from;
         self.from = match ret.high() {
@@ -74,9 +104,6 @@ impl<T: Ieee754> Iterator for Iter<T> {
             false => ret.next()
         };
 
-        if ret == self.to {
-            self.done = true;
-        }
         return Some(T::from_bits(ret))
     }
 
@@ -96,34 +123,30 @@ impl<T: Ieee754> Iterator for Iter<T> {
 
 impl<T: Ieee754> DoubleEndedIterator for Iter<T> {
     fn next_back(&mut self) -> Option<T> {
-        if self.done { return None }
+        if self.done() { return None }
 
-        let ret = self.to;
-        self.to = if ret.high() {
-            ret.next()
+        self.to = if self.to.high() {
+            self.to.next()
         } else {
-            if ret == T::Bits::zero() {
-                ret.flip_high().next()
+            if self.to == T::Bits::zero() {
+                self.to.flip_high().next()
             } else {
-                ret.prev()
+                self.to.prev()
             }
         };
 
-        if ret == self.from {
-            self.done = true
-        }
-        return Some(T::from_bits(ret))
+        return Some(T::from_bits(self.to))
     }
 }
 
 impl<T: Ieee754 + fmt::Debug> fmt::Debug for Iter<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut dbg = f.debug_struct("Iter");
-        if self.done {
+        if self.from == self.to {
             dbg.field("done", &true);
         } else {
             dbg.field("from", &T::from_bits(self.from))
-                .field("to", &T::from_bits(self.to));
+                .field("to", &self.to_inclusive());
         }
         dbg.finish()
     }
