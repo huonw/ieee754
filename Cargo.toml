@@ -16,6 +16,9 @@ Low-level manipulations of IEEE754 floating-point numbers.
 
 readme = "README.md"
 
+[build-dependencies]
+rustc_version = "0.2"
+
 [dev-dependencies]
 criterion = "0.2"
 

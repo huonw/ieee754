@@ -189,7 +189,7 @@ macro_rules! mk_impl {
             use std::prelude::v1::*;
             use std::{$f, usize};
 
-            use {Ieee754};
+            use {Ieee754, Iter};
 
             // test both `next`, and any potential internal-iteration
             // optimisations that the iterators support (which will
@@ -202,12 +202,61 @@ macro_rules! mk_impl {
             fn count_fold<I: Iterator>(it: I) -> usize {
                 it.fold(0, |i, _| i + 1)
             }
+            #[cfg(nightly)]
+            fn count_try_fold<I: Iterator>(mut it: I) -> usize {
+                const AT_A_TIME: usize = 5;
+                (0..10).map(|_| {
+                    it.try_fold(0, |i, _| {
+                        let count = i + 1;
+                        if count < AT_A_TIME {
+                            Ok(count)
+                        } else {
+                            // make the error value different to the ok one
+                            Err((count,))
+                        }
+                    }).unwrap_or_else(|x| x.0)
+                }).take_while(|x| *x > 0).sum()
+            }
+            #[cfg(not(nightly))]
+            fn count_try_fold<I: Iterator>(it: I) -> usize {
+                count_fold(it)
+            }
+            fn count_try_fold_result(mut it: Iter<$f>) -> usize {
+                const AT_A_TIME: usize = 5;
+                (0..10).map(|_| {
+                    it.try_fold_result(0, |i, _| {
+                        let count = i + 1;
+                        if count < AT_A_TIME {
+                            Ok(count)
+                        } else {
+                            // make the error value different to the ok one
+                            Err((count,))
+                        }
+                    }).unwrap_or_else(|x| x.0)
+                }).take_while(|x| *x > 0).sum()
+            }
+            fn count_try_rfold_result(mut it: Iter<$f>) -> usize {
+                const AT_A_TIME: usize = 5;
+                (0..10).map(|_| {
+                    it.try_rfold_result(0, |i, _| {
+                        let count = i + 1;
+                        if count < AT_A_TIME {
+                            Ok(count)
+                        } else {
+                            // make the error value different to the ok one
+                            Err((count,))
+                        }
+                    }).unwrap_or_else(|x| x.0)
+                }).take_while(|x| *x > 0).sum()
+            }
             fn count<I: Iterator + Clone>(it: I) -> usize {
                 let nexts = count_nexts(it.clone());
                 let fold = count_fold(it.clone());
+                let try_fold = count_try_fold(it.clone());
                 let count = it.count();
                 // check they all match
                 assert_eq!(nexts, fold);
+                assert_eq!(fold, try_fold);
                 assert_eq!(fold, count);
                 count
             }
@@ -222,38 +271,79 @@ macro_rules! mk_impl {
             fn collect_fold<I: Iterator>(it: I) -> Vec<I::Item> {
                 it.fold(vec![], |mut v, x| { v.push(x); v })
             }
+            #[cfg(nightly)]
+            fn collect_try_fold<I: Iterator>(mut it: I) -> Vec<I::Item> {
+                const AT_A_TIME: usize = 5;
+                (0..10).map(|_| {
+                    it.try_fold(vec![], |mut v, x| {
+                        v.push(x);
+                        if v.len() < AT_A_TIME { Ok(v) } else { Err(v) }
+                    }).unwrap_or_else(|x| x)
+                }).take_while(|x| x.len() > 0).flat_map(|x| x).collect()
+            }
+            #[cfg(not(nightly))]
+            fn collect_try_fold<I: Iterator>(it: I) -> Vec<I::Item> {
+                collect_fold(it)
+            }
+            fn collect_try_fold_result(mut it: Iter<$f>) -> Vec<$f> {
+                const AT_A_TIME: usize = 5;
+                (0..10).map(|_| {
+                    it.try_fold_result(vec![], |mut v, x| {
+                        v.push(x);
+                        if v.len() < AT_A_TIME { Ok(v) } else { Err(v) }
+                    }).unwrap_or_else(|x| x)
+                }).take_while(|x| x.len() > 0).flat_map(|x| x).collect()
+            }
+            fn collect_try_rfold_result(mut it: Iter<$f>) -> Vec<$f> {
+                const AT_A_TIME: usize = 5;
+                (0..10).map(|_| {
+                    it.try_rfold_result(vec![], |mut v, x| {
+                        v.push(x);
+                        if v.len() < AT_A_TIME { Ok(v) } else { Err(v) }
+                    }).unwrap_or_else(|x| x)
+                }).take_while(|x| x.len() > 0).flat_map(|x| x).collect()
+            }
             fn collect<I: Iterator<Item = $f> + Clone>(it: I) -> Vec<$f> {
                 let nexts = collect_nexts(it.clone());
                 let fold = collect_fold(it.clone());
+                let try_fold = collect_try_fold(it.clone());
                 let collect = it.collect::<Vec<_>>();
                 // check they all match
                 assert_eq!(nexts, fold);
+                assert_eq!(fold, try_fold);
                 assert_eq!(fold, collect);
                 collect
             }
 
             #[test]
             fn upto() {
-                assert_eq!(collect((0.0 as $f).upto(0.0)),
-                           &[0.0]);
-                assert_eq!(count($f::recompose(false, 1, 1).upto($f::recompose(false, 1, 10))),
-                           10);
+                let one = (0.0 as $f).upto(0.0);
+                assert_eq!(collect(one.clone()), &[0.0]);
+                assert_eq!(collect_try_fold_result(one), &[0.0]);
 
-                assert_eq!(count($f::recompose(true, -$f::exponent_bias(), 10)
-                                 .upto($f::recompose(false, -$f::exponent_bias(), 10))),
-                           21);
+                let ten = $f::recompose(false, 1, 1).upto($f::recompose(false, 1, 10));
+                assert_eq!(count(ten.clone()), 10);
+                assert_eq!(count_try_fold_result(ten), 10);
+
+                let twenty_one = $f::recompose(true, -$f::exponent_bias(), 10)
+                    .upto($f::recompose(false, -$f::exponent_bias(), 10));
+                assert_eq!(count(twenty_one.clone()), 21);
+                assert_eq!(count_try_fold_result(twenty_one), 21);
             }
             #[test]
             fn upto_rev() {
-                assert_eq!(collect((0.0 as $f).upto(0.0).rev()),
-                           &[0.0]);
+                let one = (0.0 as $f).upto(0.0);
+                assert_eq!(collect(one.clone().rev()), &[0.0]);
+                assert_eq!(collect_try_rfold_result(one), &[0.0]);
 
-                assert_eq!(count($f::recompose(false, 1, 1)
-                                 .upto($f::recompose(false, 1, 10)).rev()),
-                           10);
-                assert_eq!(count($f::recompose(true, -$f::exponent_bias(), 10)
-                                 .upto($f::recompose(false, -$f::exponent_bias(), 10)).rev()),
-                           21);
+                let ten = $f::recompose(false, 1, 1).upto($f::recompose(false, 1, 10));
+                assert_eq!(count(ten.clone().rev()), 10);
+                assert_eq!(count_try_rfold_result(ten), 10);
+
+                let twenty_one = $f::recompose(true, -$f::exponent_bias(), 10)
+                    .upto($f::recompose(false, -$f::exponent_bias(), 10));
+                assert_eq!(count(twenty_one.clone().rev()), 21);
+                assert_eq!(count_try_rfold_result(twenty_one), 21);
             }
 
             #[test]
