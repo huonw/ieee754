@@ -5,20 +5,35 @@ use {Bits, Ieee754};
 /// An iterator over floating point numbers, created by `Ieee754::upto`.
 #[derive(Clone, Eq, PartialEq)]
 pub struct Iter<T: Ieee754> {
-    // the (current) first element of the iterator
-    from: T::Bits,
-    // the current one-past-the-last element (this is an exclusive
-    // range, internally)
-    to: T::Bits
+    neg: SingleSignIter<T, Negative>,
+    pos: SingleSignIter<T, Positive>
 }
 /// Create an iterator over the floating point values in [from, to]
 /// (inclusive!)
 pub fn new_iter<T: Ieee754>(from: T, to: T) -> Iter<T> {
     assert!(from <= to);
 
+    let from_bits = from.bits();
+    let to_bits = to.bits();
+    let negative = from_bits.high();
+    let positive = !to_bits.high();
+
+    let neg_start = from_bits;
+    let pos_end = to_bits.next();
+
+    let (neg_end, pos_start) = match (negative, positive) {
+        (true, true) => (T::Bits::imin(), T::Bits::zero()),
+        // self is a range with just one sign, so one side is
+        // empty (has start == end)
+        (false, true) => (neg_start, from_bits),
+        (true, false) => (to_bits.prev(), pos_end),
+        // self is done, so both sides are empty
+        (false, false) => (neg_start, pos_end),
+    };
+
     Iter {
-        from: from.bits(),
-        to: Iter::to_exclusive(to),
+        neg: SingleSignIter { from: neg_start, to: neg_end, _sign: Negative },
+        pos: SingleSignIter { from: pos_start, to: pos_end, _sign: Positive },
     }
 }
 
@@ -32,79 +47,17 @@ fn u64_to_size_hint(x: u64) -> (usize, Option<usize>) {
 }
 
 impl<T: Ieee754> Iter<T> {
-    fn to_exclusive(to: T) -> T::Bits {
-        let to_bits = to.bits();
-        // step to one after, so the range is exclusive like [from, to),
-        // which leads to a slightly more efficient implementation
-        if to.decompose().0 {
-            to_bits.prev()
-        } else {
-            to_bits.next()
-        }
-    }
-    fn to_inclusive(&self) -> T {
-        let end = if self.to.next().high() {
-            self.to.next()
-        } else {
-            self.to.prev()
-        };
-
-        T::from_bits(end)
-    }
     fn len(&self) -> u64 {
-        let (neg, pos) = self.split_by_sign();
-        neg.len() + pos.len()
+        self.neg.len() + self.pos.len()
     }
 
-    fn done(&self) -> bool { self.from == self.to }
-
-    fn split_by_sign(&self) -> (SingleSignIter<T, Negative>, SingleSignIter<T, Positive>) {
-        let negative = !self.done() && self.from.high();
-        let positive = !self.done() && !self.to.high();
-
-        let neg_start = self.from;
-        let pos_end = self.to;
-
-        let (neg_end, pos_start) = match (negative, positive) {
-            (true, true) => (T::Bits::imin(), T::Bits::zero()),
-            // self is a range with just one sign, so one side is
-            // empty (has start == end)
-            (false, true) => (neg_start, self.from),
-            (true, false) => (self.to, pos_end),
-            // self is done, so both sides are empty
-            (false, false) => (neg_start, pos_end),
-        };
-
-        (
-            SingleSignIter { from: neg_start, to: neg_end, _sign: Negative },
-            SingleSignIter { from: pos_start, to: pos_end, _sign: Positive },
-        )
-    }
+    fn done(&self) -> bool { self.neg.done() && self.pos.done() }
 }
 
 impl<T: Ieee754> Iterator for Iter<T> {
     type Item = T;
     fn next(&mut self) -> Option<T> {
-        if self.done() { return None }
-
-        let ret = self.from;
-        self.from = match ret.high() {
-            // sign true => negative => the bit representation needs
-            // to go down
-            true => {
-                let prev = ret.prev();
-                if prev == T::Bits::imin() {
-                    prev.flip_high()
-                } else {
-                    prev
-                }
-            }
-            // sign false => positive => the bit representation needs
-            // to go up
-            false => ret.next()
-        };
-
-        return Some(T::from_bits(ret))
+        self.neg.next().or_else(|| self.pos.next())
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -115,38 +68,31 @@ impl<T: Ieee754> Iterator for Iter<T> {
     fn fold<B, F>(self, init: B, mut f: F) -> B
     where F: FnMut(B, Self::Item) -> B
     {
-        let (neg, pos) = self.split_by_sign();
-        let next = neg.fold(init, &mut f);
-        pos.fold(next, f)
+        let next = self.neg.fold(init, &mut f);
+        self.pos.fold(next, f)
     }
 }
 
 impl<T: Ieee754> DoubleEndedIterator for Iter<T> {
     fn next_back(&mut self) -> Option<T> {
-        if self.done() { return None }
-
-        self.to = if self.to.high() {
-            self.to.next()
-        } else {
-            if self.to == T::Bits::zero() {
-                self.to.flip_high().next()
-            } else {
-                self.to.prev()
-            }
-        };
-
-        return Some(T::from_bits(self.to))
+        self.pos.next_back().or_else(|| self.neg.next_back())
     }
 }
 
 impl<T: Ieee754 + fmt::Debug> fmt::Debug for Iter<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut dbg = f.debug_struct("Iter");
-        if self.from == self.to {
+        if self.done() {
             dbg.field("done", &true);
         } else {
-            dbg.field("from", &T::from_bits(self.from))
-                .field("to", &self.to_inclusive());
+            let mut iter = self.clone();
+            let (from, to) = match (iter.next(), iter.next_back()) {
+                (Some(f), Some(t)) => (f, t),
+                (Some(f), None) => (f, f),
+                _ => unreachable!()
+            };
+            dbg.field("from", &from)
+                .field("to", &to);
         }
         dbg.finish()
     }
@@ -165,7 +111,9 @@ trait Sign {
     fn dist<B: Bits>(from: B, to: B) -> u64;
 
 }
+#[derive(Clone, Eq, PartialEq)]
 struct Positive;
+#[derive(Clone, Eq, PartialEq)]
 struct Negative;
 
 impl Sign for Positive {
@@ -186,6 +134,7 @@ impl Sign for Negative {
     }
 }
 
+#[derive(Clone, Eq, PartialEq)]
 struct SingleSignIter<T: Ieee754, S: Sign> {
     from: T::Bits,
     to: T::Bits,
@@ -195,6 +144,10 @@ struct SingleSignIter<T: Ieee754, S: Sign> {
 impl<T: Ieee754, S: Sign> SingleSignIter<T, S> {
     fn len(&self) -> u64 {
         S::dist(self.from, self.to)
+    }
+
+    fn done(&self) -> bool {
+        self.from == self.to
     }
 }
 
@@ -225,5 +178,16 @@ impl<T: Ieee754, S: Sign> Iterator for SingleSignIter<T, S> {
             from = S::to_pos_inf(from);
         }
         value
+    }
+}
+
+impl<T: Ieee754, S: Sign> DoubleEndedIterator for SingleSignIter<T, S> {
+    fn next_back(&mut self) -> Option<T> {
+        if self.from != self.to {
+            self.to = S::to_neg_inf(self.to);
+            Some(T::from_bits(self.to))
+        } else {
+            None
+        }
     }
 }
