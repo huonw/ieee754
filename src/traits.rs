@@ -1,4 +1,5 @@
 use core::cmp::Ordering;
+use core::fmt;
 use core::i32;
 use Iter;
 
@@ -91,7 +92,7 @@ impl Bits for u64 {
 }
 
 /// Types that are IEEE754 floating point numbers.
-pub trait Ieee754: Copy + PartialEq + PartialOrd + Send + Sync {
+pub trait Ieee754: Copy + PartialEq + PartialOrd + Send + Sync + fmt::Debug + fmt::Display {
     /// Iterate over each value of `Self` in `[self, lim]`.
     ///
     /// The returned iterator will include subnormal numbers, and will

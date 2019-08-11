@@ -116,11 +116,10 @@ impl<T: Ieee754> UnindexedProducer for IterProducer<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use core::fmt::Debug;
     use core::{f32, f64};
     use std::vec::Vec;
 
-    fn split_test<T: Ieee754 + Debug>(from: T, to: T, mid: T) {
+    fn split_test<T: Ieee754>(from: T, to: T, mid: T) {
         let range = from.upto(to);
         let len = range.len();
         let (left, right) = IterProducer { range: range }.split();
@@ -214,14 +213,14 @@ mod tests {
         split_test(f64::NEG_INFINITY, 1.0, -1.4916681462400413e-154);
         split_test(-1.0, f64::INFINITY, 1.4916681462400413e-154);
     }
-    fn split_fail_test<T: Ieee754 + Debug>(range: Iter<T>) {
+    fn split_fail_test<T: Ieee754>(range: Iter<T>) {
         let (left, right) = IterProducer { range: range.clone() }.split();
         assert_eq!(left.range, range);
         assert!(right.is_none());
     }
     #[test]
     fn test_split_tiny() {
-        fn t<T: Ieee754 + Debug>(x: T) {
+        fn t<T: Ieee754>(x: T) {
             split_fail_test(x.upto(x));
         }
         t(0_f32);
@@ -236,7 +235,7 @@ mod tests {
 
     #[test]
     fn test_split_done() {
-        fn t<T: Ieee754 + Debug>(from: T, to: T) {
+        fn t<T: Ieee754>(from: T, to: T) {
             let mut range = from.upto(to);
             range.by_ref().for_each(|_| {});
             split_fail_test(range)
@@ -250,7 +249,7 @@ mod tests {
 
     #[test]
     fn test_iterate() {
-        fn t<T: Ieee754 + Debug>(from: T, to: T) {
+        fn t<T: Ieee754>(from: T, to: T) {
             // the elements yielded by the parallel iterate should be
             // the same as the non-parallel ones
             let mut parallel = from.upto(to).into_par_iter()

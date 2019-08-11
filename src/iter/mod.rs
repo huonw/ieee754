@@ -125,7 +125,7 @@ impl<T: Ieee754> PartialEq for Iter<T> {
 }
 impl<T: Ieee754> Eq for Iter<T> {}
 
-impl<T: Ieee754 + fmt::Debug> fmt::Debug for Iter<T> {
+impl<T: Ieee754> fmt::Debug for Iter<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut dbg = f.debug_struct("Iter");
         if self.done() {
