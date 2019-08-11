@@ -16,6 +16,7 @@ pub struct Iter<T: Ieee754> {
 /// Create an iterator over the floating point values in [from, to]
 /// (inclusive!)
 pub fn new_iter<T: Ieee754>(from: T, to: T) -> Iter<T> {
+    // this also NaN, e.g. (NaN <= x) == false for all x.
     assert!(from <= to);
 
     let from_bits = from.bits();
@@ -32,8 +33,8 @@ pub fn new_iter<T: Ieee754>(from: T, to: T) -> Iter<T> {
         // empty (has start == end)
         (false, true) => (neg_start, from_bits),
         (true, false) => (to_bits.prev(), pos_end),
-        // self is done, so both sides are empty
-        (false, false) => (neg_start, pos_end),
+        // impossible to have no negative and no positive values
+        (false, false) => unreachable!()
     };
 
     Iter {

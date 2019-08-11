@@ -9,8 +9,6 @@ pub trait Bits: Eq + PartialEq + PartialOrd + Ord + Copy + Send + Sync {
     fn zero() -> Self;
     fn imin() -> Self;
     fn high(self) -> bool;
-    fn clear_high(self) -> Self;
-    fn flip_high(self) -> Self;
 
     fn next(self) -> Self;
     fn prev(self) -> Self;
@@ -33,14 +31,6 @@ impl Bits for u32 {
     #[inline]
     fn high(self) -> bool {
         self & (1 << 31) != 0
-    }
-    #[inline]
-    fn clear_high(self) -> Self {
-        self & !(1 << 31)
-    }
-    #[inline]
-    fn flip_high(self) -> Self {
-        self ^ (1 << 31)
     }
 
     #[inline]
@@ -70,14 +60,6 @@ impl Bits for u64 {
     #[inline]
     fn high(self) -> bool {
         self & (1 << 63) != 0
-    }
-    #[inline]
-    fn clear_high(self) -> Self {
-        self & !(1 << 63)
-    }
-    #[inline]
-    fn flip_high(self) -> Self {
-        self ^ (1 << 63)
     }
 
     #[inline]

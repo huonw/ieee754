@@ -445,6 +445,7 @@ macro_rules! mk_impl {
                     }
                 }
 
+                test(0.0, 0.0);
                 test(0.0, 1.0);
                 test(-1.0, 1.0);
                 test(0.0, (0.0 as $f).next().next());
