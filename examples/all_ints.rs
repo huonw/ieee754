@@ -8,5 +8,5 @@ fn main() {
         - /* -0.0 */ 1
         + /* infinities */ 2;
 
-    println!("count {}", (0..expected as usize).map(criterion::black_box).count());
+    println!("count {}", (0..expected as u32).map(criterion::black_box).count());
 }

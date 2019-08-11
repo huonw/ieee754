@@ -6,7 +6,7 @@ Low-level manipulations of IEEE754 floating-point numbers.
 
 This library includes:
 
-- unconditional `no_std` support,
+- `no_std` support by default,
 - ulp computation (units in the last place, representing the resolution of a
   float),
 - miscellaneous functions like `nextafter` (`next` and `prev`),
@@ -14,6 +14,8 @@ This library includes:
 - the IEEE-754 `totalOrder` predicate for doing `Ord::cmp`-like
   comparisons on floats,
 - an iterator over every floating point value in a range,
+- a parallel iterator over every floating point value in a range
+  (optional: activate with the `rayon` feature),
 - relative error computation.
 
 [Documentation](http://docs.rs/ieee754),

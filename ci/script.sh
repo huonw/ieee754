@@ -3,6 +3,7 @@ set -ex
 
 cargo=cargo
 target_param=""
+features_param=""
 if [ ! -z "$TARGET" ]; then
     rustup target add "$TARGET"
     cargo install -v cross --force
@@ -10,23 +11,27 @@ if [ ! -z "$TARGET" ]; then
     target_param="--target $TARGET"
 fi
 
-$cargo build -v $target_param
+if [ -n "$FEATURES" ]; then
+    features_param="--features=$FEATURES"
+fi
+
+$cargo build -v $target_param $features_param
 
 if [  "$TRAVIS_RUST_VERSION" = "1.23.0" ]; then
     # testing requires building dev-deps, which require a newer Rust.
     exit 0
 fi
 
-$cargo test -v $target_param
+$cargo test -v $target_param $features_param
 
 # for now, `cross bench` is broken https://github.com/rust-embedded/cross/issues/239
 if [ "$cargo" != "cross" ]; then
-    $cargo bench -v $target_param -- --test # don't actually record numbers
+    $cargo bench -v $target_param $features_param -- --test # don't actually record numbers
 fi
 
-$cargo doc -v $target_param
+$cargo doc -v $target_param $features_param
 
-$cargo test -v --release
+$cargo test -v --release $features_param
 
 if [ ! -z "$COVERAGE" ]; then
     if [ ! -z "$TARGET" ]; then
@@ -35,6 +40,6 @@ if [ ! -z "$COVERAGE" ]; then
     fi
 
     cargo install -v cargo-travis || echo "cargo-travis already installed"
-    cargo coverage -v -m coverage-reports --kcov-build-location "$PWD/target"
+    cargo coverage -v -m coverage-reports $features_param --kcov-build-location "$PWD/target"
     bash <(curl -s https://codecov.io/bash) -c -X gcov -X coveragepy -s coverage-reports
 fi

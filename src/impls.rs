@@ -187,52 +187,212 @@ macro_rules! mk_impl {
         #[cfg(test)]
         mod $f {
             use std::prelude::v1::*;
-            use std::$f;
+            use std::{$f, usize};
 
-            use {Ieee754};
+            use {Ieee754, Iter};
+
+            // test both `next`, and any potential internal-iteration
+            // optimisations that the iterators support (which will
+            // almost certainly be exhibited via `fold`)
+            fn count_nexts<I: Iterator>(mut it: I) -> usize {
+                let mut i = 0;
+                while let Some(_) = it.next() { i += 1 }
+                i
+            }
+            fn count_fold<I: Iterator>(it: I) -> usize {
+                it.fold(0, |i, _| i + 1)
+            }
+            #[cfg(nightly)]
+            fn count_try_fold<I: Iterator>(mut it: I) -> usize {
+                const AT_A_TIME: usize = 5;
+                (0..10).map(|_| {
+                    it.try_fold(0, |i, _| {
+                        let count = i + 1;
+                        if count < AT_A_TIME {
+                            Ok(count)
+                        } else {
+                            // make the error value different to the ok one
+                            Err((count,))
+                        }
+                    }).unwrap_or_else(|x| x.0)
+                }).take_while(|x| *x > 0).sum()
+            }
+            #[cfg(not(nightly))]
+            fn count_try_fold<I: Iterator>(it: I) -> usize {
+                count_fold(it)
+            }
+            fn count_try_fold_result(mut it: Iter<$f>) -> usize {
+                const AT_A_TIME: usize = 5;
+                (0..10).map(|_| {
+                    it.try_fold_result(0, |i, _| {
+                        let count = i + 1;
+                        if count < AT_A_TIME {
+                            Ok(count)
+                        } else {
+                            // make the error value different to the ok one
+                            Err((count,))
+                        }
+                    }).unwrap_or_else(|x| x.0)
+                }).take_while(|x| *x > 0).sum()
+            }
+            fn count_try_rfold_result(mut it: Iter<$f>) -> usize {
+                const AT_A_TIME: usize = 5;
+                (0..10).map(|_| {
+                    it.try_rfold_result(0, |i, _| {
+                        let count = i + 1;
+                        if count < AT_A_TIME {
+                            Ok(count)
+                        } else {
+                            // make the error value different to the ok one
+                            Err((count,))
+                        }
+                    }).unwrap_or_else(|x| x.0)
+                }).take_while(|x| *x > 0).sum()
+            }
+            fn count<I: Iterator + Clone>(it: I) -> usize {
+                let nexts = count_nexts(it.clone());
+                let fold = count_fold(it.clone());
+                let try_fold = count_try_fold(it.clone());
+                let count = it.count();
+                // check they all match
+                assert_eq!(nexts, fold);
+                assert_eq!(fold, try_fold);
+                assert_eq!(fold, count);
+                count
+            }
+
+            fn collect_nexts<I: Iterator>(mut it: I) -> Vec<I::Item> {
+                let mut v = vec![];
+                while let Some(x) = it.next() {
+                    v.push(x);
+                }
+                v
+            }
+            fn collect_fold<I: Iterator>(it: I) -> Vec<I::Item> {
+                it.fold(vec![], |mut v, x| { v.push(x); v })
+            }
+            #[cfg(nightly)]
+            fn collect_try_fold<I: Iterator>(mut it: I) -> Vec<I::Item> {
+                const AT_A_TIME: usize = 5;
+                (0..10).map(|_| {
+                    it.try_fold(vec![], |mut v, x| {
+                        v.push(x);
+                        if v.len() < AT_A_TIME { Ok(v) } else { Err(v) }
+                    }).unwrap_or_else(|x| x)
+                }).take_while(|x| x.len() > 0).flat_map(|x| x).collect()
+            }
+            #[cfg(not(nightly))]
+            fn collect_try_fold<I: Iterator>(it: I) -> Vec<I::Item> {
+                collect_fold(it)
+            }
+            fn collect_try_fold_result(mut it: Iter<$f>) -> Vec<$f> {
+                const AT_A_TIME: usize = 5;
+                (0..10).map(|_| {
+                    it.try_fold_result(vec![], |mut v, x| {
+                        v.push(x);
+                        if v.len() < AT_A_TIME { Ok(v) } else { Err(v) }
+                    }).unwrap_or_else(|x| x)
+                }).take_while(|x| x.len() > 0).flat_map(|x| x).collect()
+            }
+            fn collect_try_rfold_result(mut it: Iter<$f>) -> Vec<$f> {
+                const AT_A_TIME: usize = 5;
+                (0..10).map(|_| {
+                    it.try_rfold_result(vec![], |mut v, x| {
+                        v.push(x);
+                        if v.len() < AT_A_TIME { Ok(v) } else { Err(v) }
+                    }).unwrap_or_else(|x| x)
+                }).take_while(|x| x.len() > 0).flat_map(|x| x).collect()
+            }
+            fn collect<I: Iterator<Item = $f> + Clone>(it: I) -> Vec<$f> {
+                let nexts = collect_nexts(it.clone());
+                let fold = collect_fold(it.clone());
+                let try_fold = collect_try_fold(it.clone());
+                let collect = it.collect::<Vec<_>>();
+                // check they all match
+                assert_eq!(nexts, fold);
+                assert_eq!(fold, try_fold);
+                assert_eq!(fold, collect);
+                collect
+            }
+
             #[test]
             fn upto() {
-                assert_eq!((0.0 as $f).upto(0.0).collect::<Vec<_>>(),
-                           &[0.0]);
-                assert_eq!($f::recompose(false, 1, 1).upto($f::recompose(false, 1, 10)).count(),
-                           10);
+                let one = (0.0 as $f).upto(0.0);
+                assert_eq!(collect(one.clone()), &[0.0]);
+                assert_eq!(collect_try_fold_result(one), &[0.0]);
 
-                assert_eq!($f::recompose(true, -$f::exponent_bias(), 10)
-                           .upto($f::recompose(false, -$f::exponent_bias(), 10)).count(),
-                           21);
+                let ten = $f::recompose(false, 1, 1).upto($f::recompose(false, 1, 10));
+                assert_eq!(count(ten.clone()), 10);
+                assert_eq!(count_try_fold_result(ten), 10);
+
+                let twenty_one = $f::recompose(true, -$f::exponent_bias(), 10)
+                    .upto($f::recompose(false, -$f::exponent_bias(), 10));
+                assert_eq!(count(twenty_one.clone()), 21);
+                assert_eq!(count_try_fold_result(twenty_one), 21);
             }
             #[test]
             fn upto_rev() {
-                assert_eq!(0.0_f32.upto(0.0_f32).rev().collect::<Vec<_>>(),
-                           &[0.0]);
+                let one = (0.0 as $f).upto(0.0);
+                assert_eq!(collect(one.clone().rev()), &[0.0]);
+                assert_eq!(collect_try_rfold_result(one), &[0.0]);
 
-                assert_eq!($f::recompose(false, 1, 1)
-                           .upto($f::recompose(false, 1, 10)).rev().count(),
-                           10);
-                assert_eq!($f::recompose(true, -$f::exponent_bias(), 10)
-                           .upto($f::recompose(false, -$f::exponent_bias(), 10)).rev().count(),
-                           21);
+                let ten = $f::recompose(false, 1, 1).upto($f::recompose(false, 1, 10));
+                assert_eq!(count(ten.clone().rev()), 10);
+                assert_eq!(count_try_rfold_result(ten), 10);
+
+                let twenty_one = $f::recompose(true, -$f::exponent_bias(), 10)
+                    .upto($f::recompose(false, -$f::exponent_bias(), 10));
+                assert_eq!(count(twenty_one.clone().rev()), 21);
+                assert_eq!(count_try_rfold_result(twenty_one), 21);
             }
 
             #[test]
             fn upto_infinities() {
                 use std::$f as f;
-                assert_eq!(f::MAX.upto(f::INFINITY).collect::<Vec<_>>(),
+                assert_eq!(collect(f::MAX.upto(f::INFINITY)),
                            &[f::MAX, f::INFINITY]);
-                assert_eq!(f::NEG_INFINITY.upto(f::MIN).collect::<Vec<_>>(),
+                assert_eq!(collect(f::NEG_INFINITY.upto(f::MIN)),
                            &[f::NEG_INFINITY, f::MIN]);
             }
             #[test]
             fn upto_infinities_rev() {
                 use std::$f as f;
-                assert_eq!(f::MAX.upto(f::INFINITY).rev().collect::<Vec<_>>(),
+                assert_eq!(collect(f::MAX.upto(f::INFINITY).rev()),
                            &[f::INFINITY, f::MAX]);
-                assert_eq!(f::NEG_INFINITY.upto(f::MIN).rev().collect::<Vec<_>>(),
+                assert_eq!(collect(f::NEG_INFINITY.upto(f::MIN).rev()),
                            &[f::MIN, f::NEG_INFINITY]);
             }
 
             #[test]
-            fn upto_size_hint() {
+            fn upto_size_hint_table() {
+                let signs = 2;
+                let finite_expns = (1 << $expn_n) - 1;
+                let subone_expns = (1 << ($expn_n - 1)) - 1;
+                let per_binade = 1u64 << $signif_n;
+                let table: &[($f, $f, u64)] = &[
+                    (0.0, 1.0, subone_expns * per_binade + /* +1: */ 1),
+                    (-1.0, 0.0, subone_expns * per_binade + /* -1: */ 1),
+                    (2.0, 4.0, per_binade + /* +4: */ 1),
+                    (-4.0, -2.0, per_binade + /* -2: */ 1),
+                    (-1.0, 1.0,
+                     signs * subone_expns * per_binade + /* +/-1: */ 2 - /* -0: */1),
+                    ($f::NEG_INFINITY, $f::INFINITY,
+                     signs * finite_expns * per_binade + /* +/-inf: */ 2 - /* -0: */ 1)
+                ];
+
+                for &(low, hi, count) in table.iter() {
+                    let hint = low.upto(hi).size_hint();
+                    if count > usize::MAX as u64 {
+                        assert_eq!(hint, (usize::MAX, None), "{:?}->{:?}", low, hi);
+                    } else {
+                        let count = count as usize;
+                        assert_eq!(hint, (count, Some(count)), "{:?}->{:?}", low, hi);
+                    }
+                }
+            }
+
+            #[test]
+            fn upto_size_hint_iterate() {
                 let mut iter =
                     $f::recompose(true, -$f::exponent_bias(), 10)
                     .upto($f::recompose(false, -$f::exponent_bias(), 10));
@@ -260,6 +420,37 @@ macro_rules! mk_impl {
                 }
                 assert_eq!(iter.next(), None);
                 assert_eq!(iter.size_hint(), (0, Some(0)))
+            }
+
+            #[test]
+            fn upto_fmt() {
+                fn test(from: $f, to: $f) {
+                    let mut iter = from.upto(to);
+                    assert_eq!(format!("{:?}", iter),
+                               format!("Iter {{ from: {:?}, to: {:?} }}",
+                                       from, to));
+
+                    if from.next() < to.prev() {
+                        let _ = iter.next();
+                        let _ = iter.next_back();
+                        assert_eq!(format!("{:?}", iter),
+                                   format!("Iter {{ from: {:?}, to: {:?} }}",
+                                           from.next(), to.prev()));
+                    }
+
+                    if iter.size_hint().0 < 1_000_000 {
+                        iter.by_ref().for_each(|_| {});
+                        assert_eq!(format!("{:?}", iter),
+                                   "Iter { done: true }");
+                    }
+                }
+
+                test(0.0, 0.0);
+                test(0.0, 1.0);
+                test(-1.0, 1.0);
+                test(0.0, (0.0 as $f).next().next());
+                test(1e30, (1e30 as $f).next().next().next());
+                test($f::NEG_INFINITY, $f::INFINITY);
             }
 
             #[test]

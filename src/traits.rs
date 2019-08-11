@@ -1,19 +1,80 @@
 use core::cmp::Ordering;
-
+use core::fmt;
+use core::i32;
 use Iter;
 
-pub trait Bits: Eq + PartialEq + PartialOrd + Ord + Copy {
+pub trait Bits: Eq + PartialEq + PartialOrd + Ord + Copy + Send + Sync {
     fn as_u64(self) -> u64;
+
+    fn zero() -> Self;
+    fn imin() -> Self;
+    fn high(self) -> bool;
+
+    fn next(self) -> Self;
+    fn prev(self) -> Self;
+
+    fn offset(self, offset: i64) -> Self;
 }
 impl Bits for u32 {
+    #[inline]
     fn as_u64(self) -> u64 { self as u64 }
+
+    #[inline]
+    fn zero() -> Self {
+        0
+    }
+    #[inline]
+    fn imin() -> Self {
+        1 << 31
+    }
+
+    #[inline]
+    fn high(self) -> bool {
+        self & (1 << 31) != 0
+    }
+
+    #[inline]
+    fn next(self) -> Self { self + 1 }
+    #[inline]
+    fn prev(self) -> Self { self - 1 }
+
+    #[inline]
+    fn offset(self, offset: i64) -> Self {
+        debug_assert!(i32::MIN as i64 <= offset && offset <= i32::MAX as i64);
+        self.wrapping_add(offset as u32)
+    }
 }
 impl Bits for u64 {
+    #[inline]
     fn as_u64(self) -> u64 { self }
+
+    #[inline]
+    fn zero() -> Self {
+        0
+    }
+    #[inline]
+    fn imin() -> Self {
+        1 << 63
+    }
+
+    #[inline]
+    fn high(self) -> bool {
+        self & (1 << 63) != 0
+    }
+
+    #[inline]
+    fn next(self) -> Self { self + 1 }
+    #[inline]
+    fn prev(self) -> Self { self - 1 }
+
+    #[inline]
+    fn offset(self, offset: i64) -> Self {
+        self.wrapping_add(offset as u64)
+    }
 }
 
 /// Types that are IEEE754 floating point numbers.
-pub trait Ieee754: Copy + PartialEq + PartialOrd {
+pub trait Ieee754: Copy + PartialEq + PartialOrd + Send + Sync + fmt::Debug + fmt::Display {
     /// Iterate over each value of `Self` in `[self, lim]`.
     ///
     /// The returned iterator will include subnormal numbers, and will

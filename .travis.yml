@@ -16,6 +16,15 @@ matrix:
             packages:
               - gcc-multilib
 
+      - rust: stable
+        services: docker
+        env: TARGET=i686-unknown-linux-gnu FEATURES=rayon
+        sudo: required
+        addons:
+          apt:
+            packages:
+              - gcc-multilib
+
       - rust: beta
 
       - rust: 1.23.0
@@ -26,7 +35,16 @@ matrix:
         sudo: required
 
       - rust: stable
+        services: docker
+        env: TARGET=mips64-unknown-linux-gnuabi64 FEATURES=rayon
+        sudo: required
+
+      - rust: stable
         env: COVERAGE=1
+        sudo: required
+
+      - rust: stable
+        env: COVERAGE=1 FEATURES=rayon
         sudo: required
 
 cache: cargo
