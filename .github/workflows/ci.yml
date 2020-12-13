@@ -18,8 +18,10 @@ jobs:
           - rust: beta
           - rust: 1.23.0
 
+    runs-on: ubuntu-latest
+
     env:
-      CARGO_ARGS: "-v --features ${{ matrix.features}"
+      CARGO_ARGS: "-v --features ${{ matrix.features }}"
 
     steps:
       - uses: actions/checkout@v2
