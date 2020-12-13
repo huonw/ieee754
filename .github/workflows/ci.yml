@@ -31,12 +31,12 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: build
-          args: "$CARGO_ARGS"
+          args: "${{ env.CARGO_ARGS }}"
 
       - uses: actions-rs/cargo@v1
         with:
           command: test
-          args: "$CARGO_ARGS"
+          args: "${{ env.CARGO_ARGS }}"
           # testing requires building dev-deps, which require a newer Rust.
         if: matrix.rust != '1.23.0'
 
@@ -44,11 +44,11 @@ jobs:
         with:
           command: bench
           # don't actually record numbers
-          args: "$CARGO_ARGS -- --test"
+          args: "${{ env.CARGO_ARGS }} -- --test"
         # testing requires building dev-deps, which require a newer Rust.
         if: matrix.rust != '1.23.0'
 
       - uses: actions-rs/cargo@v1
         with:
           command: doc
-          args: "$CARGO_ARGS"
+          args: "${{ env.CARGO_ARGS }}"
