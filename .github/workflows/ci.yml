@@ -20,6 +20,7 @@ jobs:
           - rust: stable
             features: "rayon"
           - rust: beta
+            features: "rayon"
           - rust: 1.23.0 # MSRV
 
     runs-on: ubuntu-latest
