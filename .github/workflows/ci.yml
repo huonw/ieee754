@@ -11,12 +11,13 @@ jobs:
       matrix:
         include:
           - rust: nightly
+          - rust: nightly
+            features: "rayon"
           - rust: stable
-            features: ""
           - rust: stable
             features: "rayon"
           - rust: beta
-          - rust: 1.23.0
+          - rust: 1.23.0 # MSRV
 
     runs-on: ubuntu-latest
 
@@ -29,19 +30,32 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ matrix.rust }}
-      - uses: actions-rs/cargo@v1
+
+      - name: build
+        uses: actions-rs/cargo@v1
         with:
           command: build
           args: "${{ env.CARGO_ARGS }}"
 
-      - uses: actions-rs/cargo@v1
+      - name: set coverage variables
+        run: |
+          flags='-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
+          echo 'CARGO_INCREMENTAL=0' >> $GITHUB_ENV
+          echo "RUSTFLAGS=$flags" >> $GITHUB_ENV
+          echo "RUSTDOCFLAGS=$flags" >> $GITHUB_ENV
+        # grcov only works with nightly's -Zprofile
+        if: matrix.rust == 'nightly'
+
+      - name: test
+        uses: actions-rs/cargo@v1
         with:
           command: test
           args: "${{ env.CARGO_ARGS }}"
-          # testing requires building dev-deps, which require a newer Rust.
+        # testing requires building dev-deps, which require a newer Rust.
         if: matrix.rust != '1.23.0'
 
-      - uses: actions-rs/cargo@v1
+      - name: bench
+        uses: actions-rs/cargo@v1
         with:
           command: bench
           # don't actually record numbers
@@ -49,7 +63,25 @@ jobs:
         # testing requires building dev-deps, which require a newer Rust.
         if: matrix.rust != '1.23.0'
 
-      - uses: actions-rs/cargo@v1
+      - name: test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: "--release ${{ env.CARGO_ARGS }}"
+        # testing requires building dev-deps, which require a newer Rust.
+        if: matrix.rust != '1.23.0'
+
+      - name: doc
+        uses: actions-rs/cargo@v1
         with:
           command: doc
           args: "${{ env.CARGO_ARGS }}"
+
+      - id: coverage
+        uses: actions-rs/grcov@v0.1
+
+      - uses: codecov/codecov-action@v1
+        with:
+          file: lcov.info
+          verbose: true
+        if: matrix.rust == 'nightly'
