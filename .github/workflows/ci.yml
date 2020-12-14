@@ -3,6 +3,9 @@ name: CI
 
 on:
   push:
+    branches:
+      # other branches are built via PRs
+      - master
   pull_request:
 
 jobs:
