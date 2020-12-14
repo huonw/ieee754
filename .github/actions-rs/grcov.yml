@@ -1,5 +1,5 @@
 ---
-branch: true
+branch: false
 llvm: true
 output-type: lcov
 output-path: ./lcov.info
