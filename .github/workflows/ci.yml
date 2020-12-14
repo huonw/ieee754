@@ -83,6 +83,7 @@ jobs:
 
       - id: coverage
         uses: actions-rs/grcov@v0.1
+        if: matrix.rust == 'nightly'
 
       - uses: codecov/codecov-action@v1
         with:
