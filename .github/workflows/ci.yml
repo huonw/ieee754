@@ -81,6 +81,13 @@ jobs:
           command: doc
           args: "${{ env.CARGO_ARGS }}"
 
+      - name: Pre-installing grcov
+        uses: actions-rs/install@v0.1
+        with:
+          crate: grcov
+          use-tool-cache: true
+        if: matrix.rust == 'nightly'
+
       - id: coverage
         uses: actions-rs/grcov@v0.1
         if: matrix.rust == 'nightly'
@@ -88,5 +95,4 @@ jobs:
       - uses: codecov/codecov-action@v1
         with:
           file: lcov.info
-          verbose: true
         if: matrix.rust == 'nightly'
