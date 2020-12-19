@@ -42,13 +42,13 @@ jobs:
             args="${args} --target '${{ matrix.target }}'"
             cross=true
           else
-            cross=false
+            cross=
           fi
 
           if [ "${{ matrix.rust }}" = nightly ]; then
             coverage=true
           else
-            coverage=false
+            coverage=
           fi
 
           echo "CARGO_ARGS=$args" >> $GITHUB_ENV
@@ -62,7 +62,7 @@ jobs:
           echo "RUSTFLAGS=$flags" >> $GITHUB_ENV
           echo "RUSTDOCFLAGS=$flags" >> $GITHUB_ENV
         # grcov only works with nightly's -Zprofile
-        if: env.COVERAGE == 'true'
+        if: env.COVERAGE
 
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -118,13 +118,13 @@ jobs:
         with:
           crate: grcov
           use-tool-cache: true
-        if: env.COVERAGE == 'true'
+        if: env.COVERAGE
 
       - id: coverage
         uses: actions-rs/grcov@v0.1
-        if: env.COVERAGE == 'true'
+        if: env.COVERAGE
 
       - uses: codecov/codecov-action@v1
         with:
           file: lcov.info
-        if: env.COVERAGE == 'true'
+        if: env.COVERAGE
