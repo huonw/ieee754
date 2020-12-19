@@ -145,11 +145,11 @@ jobs:
           tag_version="${{ github.ref }}"
           tag_version="${tag_version#refs/tags/v}"
 
-          wget https://github.com/TomWright/dasel/releases/download/v1.9.1/dasel_linux_amd64 -O /tmp/dasel
+          curl https://github.com/TomWright/dasel/releases/download/v1.9.1/dasel_linux_amd64 --output /tmp/dasel
           chmod +x /tmp/dasel
           file_version=$(/tmp/dasel -f Cargo.toml -s package.version)
 
-          if [ "${file_version}" != "${tag_version}" ];
+          if [ "${file_version}" != "${tag_version}" ]; then
               echo "Expected Cargo.toml version (${file_version}) and tag version (${tag_version}) to match"
               exit 1
           fi
