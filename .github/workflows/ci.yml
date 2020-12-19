@@ -62,7 +62,7 @@ jobs:
           echo "RUSTFLAGS=$flags" >> $GITHUB_ENV
           echo "RUSTDOCFLAGS=$flags" >> $GITHUB_ENV
         # grcov only works with nightly's -Zprofile
-        if: env.COVERAGE
+        if: env.COVERAGE == 'true'
 
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
@@ -118,13 +118,13 @@ jobs:
         with:
           crate: grcov
           use-tool-cache: true
-        if: env.COVERAGE
+        if: env.COVERAGE == 'true'
 
       - id: coverage
         uses: actions-rs/grcov@v0.1
-        if: env.COVERAGE
+        if: env.COVERAGE == 'true'
 
       - uses: codecov/codecov-action@v1
         with:
           file: lcov.info
-        if: env.COVERAGE
+        if: env.COVERAGE == 'true'
