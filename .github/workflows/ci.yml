@@ -6,6 +6,8 @@ on:
     branches:
       # other branches are built via PRs
       - master
+    tags:
+      - 'v*'
   pull_request:
 
 jobs:
@@ -128,3 +130,42 @@ jobs:
         with:
           file: lcov.info
         if: env.COVERAGE
+
+  release:
+    needs:
+      - run
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, "refs/tags/v")
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Check version matches
+        run: |
+          tag_version="${{ github.ref }}"
+          tag_version="${tag_version#refs/tags/v}"
+
+          wget https://github.com/TomWright/dasel/releases/download/v1.9.1/dasel_linux_amd64 -O /tmp/dasel
+          chmod +x /tmp/dasel
+          file_version=$(/tmp/dasel -f Cargo.toml -s package.version)
+
+          if [ "${file_version}" != "${tag_version}" ];
+              echo "Expected Cargo.toml version (${file_version}) and tag version (${tag_version}) to match"
+              exit 1
+          fi
+
+      - name: Create release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: true # manual intervention required to put in release notes etc.
+          prerelease: >-
+            ${{ contains(github.ref, '-beta') || contains(github.ref, '-alpha') || contains(github.ref, '-rc') }}
+
+      - name: Publish to crates.io
+        run: |
+          cargo publish -v --no-verify --token "${{ secrets.CRATES_IO_TOKEN }}"
