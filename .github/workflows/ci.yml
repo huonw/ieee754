@@ -16,31 +16,44 @@ jobs:
           - rust: nightly
           - rust: nightly
             features: "rayon"
+
           - rust: stable
           - rust: stable
             features: "rayon"
+          - rust: stable
+            features: "rayon"
+            target: mips64-unknown-linux-gnuabi64
+          - rust: stable
+            features: "rayon"
+            target: i686-unknown-linux-gnu
+
           - rust: beta
             features: "rayon"
           - rust: 1.23.0 # MSRV
 
     runs-on: ubuntu-latest
 
-    env:
-      CARGO_ARGS: >-
-        -v --features "${{ matrix.features }}"
-
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ matrix.rust }}
-          default: true
+      - name: set variables
+        run: |
+          args="-v --features '${{ matrix.features }}'"
 
-      - name: build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: "${{ env.CARGO_ARGS }}"
+          if [ -n "${{ matrix.target }}" ]; then
+            args="${args} --target '${{ matrix.target }}'"
+            cross=true
+          else
+            cross=false
+          fi
+
+          if [ "${{ matrix.rust }}" = nightly ]; then
+            coverage=true
+          else
+            coverage=false
+          fi
+
+          echo "CARGO_ARGS=$args" >> $GITHUB_ENV
+          echo "USE_CROSS=$cross" >> $GITHUB_ENV
+          echo "COVERAGE=$coverage" >> $GITHUB_ENV
 
       - name: set coverage variables
         run: |
@@ -49,12 +62,27 @@ jobs:
           echo "RUSTFLAGS=$flags" >> $GITHUB_ENV
           echo "RUSTDOCFLAGS=$flags" >> $GITHUB_ENV
         # grcov only works with nightly's -Zprofile
-        if: matrix.rust == 'nightly'
+        if: env.COVERAGE
+
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          target: ${{ matrix.target }}
+          default: true
+
+      - name: build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          use-cross: "${{ env.USE_CROSS }}"
+          args: "${{ env.CARGO_ARGS }}"
 
       - name: test
         uses: actions-rs/cargo@v1
         with:
           command: test
+          use-cross: "${{ env.USE_CROSS }}"
           args: "${{ env.CARGO_ARGS }}"
         # testing requires building dev-deps, which require a newer Rust.
         if: matrix.rust != '1.23.0'
@@ -63,6 +91,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: bench
+          use-cross: "${{ env.USE_CROSS }}"
           # don't actually record numbers
           args: "${{ env.CARGO_ARGS }} -- --test"
         # testing requires building dev-deps, which require a newer Rust.
@@ -72,6 +101,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
+          use-cross: "${{ env.USE_CROSS }}"
           args: "--release ${{ env.CARGO_ARGS }}"
         # testing requires building dev-deps, which require a newer Rust.
         if: matrix.rust != '1.23.0'
@@ -80,6 +110,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: doc
+          use-cross: "${{ env.USE_CROSS }}"
           args: "${{ env.CARGO_ARGS }}"
 
       - name: Pre-installing grcov
@@ -87,13 +118,13 @@ jobs:
         with:
           crate: grcov
           use-tool-cache: true
-        if: matrix.rust == 'nightly'
+        if: env.COVERAGE
 
       - id: coverage
         uses: actions-rs/grcov@v0.1
-        if: matrix.rust == 'nightly'
+        if: env.COVERAGE
 
       - uses: codecov/codecov-action@v1
         with:
           file: lcov.info
-        if: matrix.rust == 'nightly'
+        if: env.COVERAGE
