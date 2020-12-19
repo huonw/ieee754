@@ -142,9 +142,7 @@ jobs:
 
       - name: Check version matches
         run: |
-          tag_version="${{ github.ref }}"
-          tag_version="${tag_version#refs/tags/v}"
-
+          tag_version="${GITHUB_REF#refs/tags/v}"
           file_version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml )
 
           if [ "${file_version}" != "${tag_version}" ]; then
