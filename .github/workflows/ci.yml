@@ -1,0 +1,167 @@
+---
+name: CI
+
+on:
+  push:
+    branches:
+      # other branches are built via PRs
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+
+jobs:
+  run:
+    strategy:
+      matrix:
+        include:
+          - rust: nightly
+          - rust: nightly
+            features: "rayon"
+
+          - rust: stable
+          - rust: stable
+            features: "rayon"
+          - rust: stable
+            features: "rayon"
+            target: mips64-unknown-linux-gnuabi64
+          - rust: stable
+            features: "rayon"
+            target: i686-unknown-linux-gnu
+
+          - rust: beta
+            features: "rayon"
+          - rust: 1.23.0 # MSRV
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: set variables
+        run: |
+          args="-v --features '${{ matrix.features }}'"
+
+          if [ -n "${{ matrix.target }}" ]; then
+            args="${args} --target '${{ matrix.target }}'"
+            cross=true
+          else
+            cross=
+          fi
+
+          if [ "${{ matrix.rust }}" = nightly ]; then
+            coverage=true
+          else
+            coverage=
+          fi
+
+          echo "CARGO_ARGS=$args" >> $GITHUB_ENV
+          echo "USE_CROSS=$cross" >> $GITHUB_ENV
+          echo "COVERAGE=$coverage" >> $GITHUB_ENV
+
+      - name: set coverage variables
+        run: |
+          flags='-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
+          echo 'CARGO_INCREMENTAL=0' >> $GITHUB_ENV
+          echo "RUSTFLAGS=$flags" >> $GITHUB_ENV
+          echo "RUSTDOCFLAGS=$flags" >> $GITHUB_ENV
+        # grcov only works with nightly's -Zprofile
+        if: env.COVERAGE
+
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          target: ${{ matrix.target }}
+          default: true
+
+      - name: build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          use-cross: "${{ env.USE_CROSS }}"
+          args: "${{ env.CARGO_ARGS }}"
+
+      - name: test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          use-cross: "${{ env.USE_CROSS }}"
+          args: "${{ env.CARGO_ARGS }}"
+        # testing requires building dev-deps, which require a newer Rust.
+        if: matrix.rust != '1.23.0'
+
+      - name: bench
+        uses: actions-rs/cargo@v1
+        with:
+          command: bench
+          use-cross: "${{ env.USE_CROSS }}"
+          # don't actually record numbers
+          args: "${{ env.CARGO_ARGS }} -- --test"
+        # testing requires building dev-deps, which require a newer Rust.
+        if: matrix.rust != '1.23.0'
+
+      - name: test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          use-cross: "${{ env.USE_CROSS }}"
+          args: "--release ${{ env.CARGO_ARGS }}"
+        # testing requires building dev-deps, which require a newer Rust.
+        if: matrix.rust != '1.23.0'
+
+      - name: doc
+        uses: actions-rs/cargo@v1
+        with:
+          command: doc
+          use-cross: "${{ env.USE_CROSS }}"
+          args: "${{ env.CARGO_ARGS }}"
+
+      - name: Pre-installing grcov
+        uses: actions-rs/install@v0.1
+        with:
+          crate: grcov
+          use-tool-cache: true
+        if: env.COVERAGE
+
+      - id: coverage
+        uses: actions-rs/grcov@v0.1
+        if: env.COVERAGE
+
+      - uses: codecov/codecov-action@v1
+        with:
+          file: lcov.info
+        if: env.COVERAGE
+
+  release:
+    needs:
+      - run
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Check version matches
+        run: |
+          tag_version="${GITHUB_REF#refs/tags/v}"
+          file_version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml )
+
+          if [ "${file_version}" != "${tag_version}" ]; then
+              echo "Expected Cargo.toml version (${file_version}) and tag version (${tag_version}) to match"
+              exit 1
+          fi
+
+      - name: Create release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: true # manual intervention required to put in release notes etc.
+          prerelease: >-
+            ${{ contains(github.ref, '-beta') || contains(github.ref, '-alpha') || contains(github.ref, '-rc') }}
+
+      - name: Publish to crates.io
+        run: |
+          cargo publish -v --no-verify --token "${{ secrets.CRATES_IO_TOKEN }}"
