@@ -1,6 +1,6 @@
+use core::ops::ControlFlow;
 use core::usize;
 use core::fmt;
-#[cfg(nightly)]
 use core::ops::Try;
 use {Bits, Ieee754};
 
@@ -52,34 +52,12 @@ fn u64_to_size_hint(x: u64) -> (usize, Option<usize>) {
     }
 }
 
-#[cfg(nightly)]
-fn result_to_try<R: Try>(r: Result<R::Ok, R::Error>) -> R {
-    match r {
-        Ok(ok) => R::from_ok(ok),
-        Err(error) => R::from_error(error)
-    }
-}
-
 impl<T: Ieee754> Iter<T> {
     fn len(&self) -> u64 {
         self.neg.len() + self.pos.len()
     }
 
     fn done(&self) -> bool { self.neg.done() && self.pos.done() }
-
-    /// A non-nightly only version of `Iterator::try_fold`.
-    pub fn try_fold_result<B, F, E>(&mut self, init: B, mut f: F) -> Result<B, E>
-    where F: FnMut(B, T) -> Result<B, E> {
-        let next = self.neg.try_fold_result(init, &mut f)?;
-        self.pos.try_fold_result(next, f)
-    }
-
-    /// A non-nightly only version of `Iterator::try_fold`.
-    pub fn try_rfold_result<B, F, E>(&mut self, init: B, mut f: F) -> Result<B, E>
-    where F: FnMut(B, T) -> Result<B, E> {
-        let next = self.pos.try_rfold_result(init, &mut f)?;
-        self.neg.try_fold_result(next, f)
-    }
 }
 
 impl<T: Ieee754> Iterator for Iter<T> {
@@ -100,17 +78,23 @@ impl<T: Ieee754> Iterator for Iter<T> {
         self.pos.fold(next, f)
     }
 
-    #[cfg(nightly)]
     fn try_fold<B, F, R>(&mut self, init: B, mut f: F) -> R
-    where F: FnMut(B, Self::Item) -> R,
-          R: Try<Ok = B> {
-        result_to_try(self.try_fold_result(init, |b, x| f(b, x).into_result()))
+    where F: FnMut(B, T) -> R, R: Try<Output = B> {
+        let next = self.neg.try_fold(init, &mut f)?;
+        self.pos.try_fold(next, f)
     }
+
 }
 
 impl<T: Ieee754> DoubleEndedIterator for Iter<T> {
     fn next_back(&mut self) -> Option<T> {
         self.pos.next_back().or_else(|| self.neg.next_back())
+    }
+
+    fn try_rfold<B, F, R>(&mut self, init: B, mut f: F) -> R
+    where F: FnMut(B, T) -> R, R: Try<Output = B> {
+        let next = self.pos.try_rfold(init, &mut f)?;
+        self.neg.try_rfold(next, f)
     }
 }
 
@@ -197,36 +181,6 @@ impl<T: Ieee754, S: Sign> SingleSignIter<T, S> {
         self.from == self.to
     }
 
-    fn try_fold_result<B, F, E>(&mut self, mut value: B, mut f: F) -> Result<B, E>
-    where F: FnMut(B, T) -> Result<B, E> {
-        let SingleSignIter { mut from, to, .. } = *self;
-        while from != to {
-            let this = T::from_bits(from);
-            from = S::to_pos_inf(from);
-            value = f(value, this).map_err(|e| {
-                // save the new state before leaving, since we might iterate again
-                self.from = from;
-                e
-            })?;
-        }
-        self.from = from;
-        Ok(value)
-    }
-
-    fn try_rfold_result<B, F, E>(&mut self, mut value: B, mut f: F) -> Result<B, E>
-    where F: FnMut(B, T) -> Result<B, E> {
-        let SingleSignIter { from, mut to, .. } = *self;
-        while from != to {
-            to = S::to_neg_inf(to);
-            let this = T::from_bits(to);
-            value = f(value, this).map_err(|e| {
-                self.to = to;
-                e
-            })?;
-        }
-        self.to = to;
-        Ok(value)
-    }
 }
 
 impl<T: Ieee754, S: Sign> Iterator for SingleSignIter<T, S> {
@@ -246,24 +200,42 @@ impl<T: Ieee754, S: Sign> Iterator for SingleSignIter<T, S> {
         u64_to_size_hint(self.len())
     }
 
+    fn try_fold<B, F, R>(&mut self, mut value: B, mut f: F) -> R
+    where F: FnMut(B, T) -> R,
+    R: Try<Output = B> {
+        let SingleSignIter { mut from, to, .. } = *self;
+        while from != to {
+            let this = T::from_bits(from);
+            from = S::to_pos_inf(from);
+            let cf = f(value, this).branch();
+            match cf {
+                ControlFlow::Continue(a) => value = a,
+                ControlFlow::Break(r) => {
+                    // save the new state before leaving, since we might iterate again
+                    self.from = from;
+                    return R::from_residual(r) 
+                }
+            }
+        }
+        self.from = from;
+        R::from_output(value)
+    }
+
     fn fold<B, F>(mut self, init: B, mut f: F) -> B
     where
         F: FnMut(B, Self::Item) -> B,
     {
         enum Void {}
 
-        match self.try_fold_result(init, |b, x| Ok::<_, Void>(f(b, x))) {
-            Ok(result) => result,
-            Err(_) => unreachable!()
+        let cf = self.try_fold(init, |b, x| -> ControlFlow<Void, B> {
+            Try::from_output(f(b, x))
+        });
+        match cf {
+            ControlFlow::Continue(accum) => accum,
+            ControlFlow::Break(_) => unreachable!()
         }
     }
 
-    #[cfg(nightly)]
-    fn try_fold<B, F, R>(&mut self, init: B, mut f: F) -> R
-    where F: FnMut(B, Self::Item) -> R,
-          R: Try<Ok = B> {
-        result_to_try(self.try_fold_result(init, |b, x| f(b, x).into_result()))
-    }
 }
 
 impl<T: Ieee754, S: Sign> DoubleEndedIterator for SingleSignIter<T, S> {
@@ -276,10 +248,39 @@ impl<T: Ieee754, S: Sign> DoubleEndedIterator for SingleSignIter<T, S> {
         }
     }
 
-    #[cfg(nightly)]
-    fn try_rfold<B, F, R>(&mut self, init: B, mut f: F) -> R
-    where F: FnMut(B, Self::Item) -> R,
-          R: Try<Ok = B> {
-        result_to_try(self.try_fold_result(init, |b, x| f(b, x).into_result()))
+    fn try_rfold<B, F, R>(&mut self, mut value: B, mut f: F) -> R
+    where F: FnMut(B, T) -> R,
+    R: Try<Output = B> {
+        let SingleSignIter { from, mut to, .. } = *self;
+        while from != to {
+            to = S::to_neg_inf(to);
+            let this = T::from_bits(to);
+            let cf = f(value, this).branch();
+            match cf {
+                ControlFlow::Continue(a) => value = a,
+                ControlFlow::Break(r) => {
+                    // save the new state before leaving, since we might iterate again
+                    self.to = to;
+                    return R::from_residual(r) 
+                }
+            }
+        }
+        self.to = to;
+        R::from_output(value)
+    }
+
+    fn rfold<B, F>(mut self, init: B, mut f: F) -> B
+    where
+        F: FnMut(B, Self::Item) -> B,
+    {
+        enum Void {}
+
+        let cf = self.try_rfold(init, |b, x| -> ControlFlow<Void, B> {
+            Try::from_output(f(b, x))
+        });
+        match cf {
+            ControlFlow::Continue(accum) => accum,
+            ControlFlow::Break(_) => unreachable!()
+        }
     }
 }
