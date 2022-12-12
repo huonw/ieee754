@@ -22,6 +22,15 @@ macro_rules! mk_impl {
             type Exponent = $expn;
             type RawExponent = $expn_raw;
             type Significand = $signif;
+
+            const SIGNIF_SIZE : u8 = $signif_n;
+            const EXP_SIZE : u8 = $expn_n;
+            const EXP_ZERO_SUBNORMAL : Self::RawExponent = 0;
+            const EXP_INF_NAN : Self::RawExponent = ((1 << $expn_n) - 1) as Self::RawExponent;
+            const EXP_SMALLEST_NORMAL : Self::RawExponent = 1;
+            const EXP_HIGHEST_NORMAL : Self::RawExponent = ((1 << $expn_n) - 2) as Self::RawExponent;
+            const EXP_BIAS : Self::Exponent = (1 << ($expn_n - 1)) - 1;
+
             #[inline]
             fn upto(self, lim: Self) -> Iter<Self> {
                 assert!(self <= lim);
@@ -85,7 +94,7 @@ macro_rules! mk_impl {
 
             #[inline]
             fn exponent_bias() -> Self::Exponent {
-                (1 << ($expn_n - 1)) - 1
+                Self::EXP_BIAS
             }
 
             #[inline]
