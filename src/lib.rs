@@ -47,7 +47,8 @@
 //! ```
 
 #![no_std]
-#![cfg_attr(nightly, feature(try_trait))]
+//#![cfg_attr(nightly, feature(try_trait_v2))]
+#![feature(try_trait_v2)]
 #[cfg(test)] #[macro_use] extern crate std;
 
 mod iter;
