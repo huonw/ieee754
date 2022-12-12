@@ -104,6 +104,18 @@ pub trait Ieee754: Copy + PartialEq + PartialOrd + Send + Sync + fmt::Debug + fm
     /// A type large enough to store the significand of `Self`.
     type Significand;
 
+    /// Number of bits used for the significand of Self
+    const SIGNIF_SIZE: u8;
+    /// Number of bits used for the exponent of Self;
+    const EXP_SIZE: u8;
+    /// Value of exponent part for zero/subnormal numbers
+    const EXP_ZERO_SUBNORMAL: Self::RawExponent;
+    /// Value of exponent part for inf/NaN numbers
+    const EXP_INF_NAN: Self::RawExponent;
+    const EXP_SMALLEST_NORMAL: Self::RawExponent;
+    const EXP_HIGHEST_NORMAL: Self::RawExponent;
+    const EXP_BIAS: Self::Exponent;
+
     /// Return the next value after `self`.
     ///
     /// Calling this on NaN or positive infinity will yield nonsense.
