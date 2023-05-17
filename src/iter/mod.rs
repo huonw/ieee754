@@ -13,41 +13,43 @@ pub struct Iter<T: Ieee754> {
     neg: SingleSignIter<T, Negative>,
     pos: SingleSignIter<T, Positive>,
 }
-/// Create an iterator over the floating point values in [from, to]
-/// (inclusive!)
-pub fn new_iter<T: Ieee754>(from: T, to: T) -> Iter<T> {
-    // this also NaN, e.g. (NaN <= x) == false for all x.
-    assert!(from <= to);
+impl<T: Ieee754> Iter<T> {
+    /// Create an iterator over the floating point values in [from, to]
+    /// (inclusive!)
+    pub fn new(from: T, to: T) -> Iter<T> {
+        // this also NaN, e.g. (NaN <= x) == false for all x.
+        assert!(from <= to);
 
-    let from_bits = from.bits();
-    let to_bits = to.bits();
-    let negative = from_bits.high();
-    let positive = !to_bits.high();
+        let from_bits = from.bits();
+        let to_bits = to.bits();
+        let negative = from_bits.high();
+        let positive = !to_bits.high();
 
-    let neg_start = from_bits;
-    let pos_end = to_bits.next();
+        let neg_start = from_bits;
+        let pos_end = to_bits.next();
 
-    let (neg_end, pos_start) = match (negative, positive) {
-        (true, true) => (T::Bits::imin(), T::Bits::zero()),
-        // self is a range with just one sign, so one side is
-        // empty (has start == end)
-        (false, true) => (neg_start, from_bits),
-        (true, false) => (to_bits.prev(), pos_end),
-        // impossible to have no negative and no positive values
-        (false, false) => unreachable!(),
-    };
+        let (neg_end, pos_start) = match (negative, positive) {
+            (true, true) => (T::Bits::imin(), T::Bits::zero()),
+            // self is a range with just one sign, so one side is
+            // empty (has start == end)
+            (false, true) => (neg_start, from_bits),
+            (true, false) => (to_bits.prev(), pos_end),
+            // impossible to have no negative and no positive values
+            (false, false) => unreachable!(),
+        };
 
-    Iter {
-        neg: SingleSignIter {
-            from: neg_start,
-            to: neg_end,
-            _sign: Negative,
-        },
-        pos: SingleSignIter {
-            from: pos_start,
-            to: pos_end,
-            _sign: Positive,
-        },
+        Iter {
+            neg: SingleSignIter {
+                from: neg_start,
+                to: neg_end,
+                _sign: Negative,
+            },
+            pos: SingleSignIter {
+                from: pos_start,
+                to: pos_end,
+                _sign: Positive,
+            },
+        }
     }
 }
 

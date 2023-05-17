@@ -30,7 +30,7 @@ macro_rules! mk_impl {
                 #[inline(always)]
                 fn canon(x: $f) -> $f { if x == 0.0 { 0.0 } else { x } }
 
-                crate::iter::new_iter(canon(self), canon(lim))
+                Iter::new(canon(self), canon(lim))
             }
             #[inline]
             fn ulp(self) -> Option<Self> {
