@@ -1,7 +1,7 @@
-use core::usize;
 use core::fmt;
 #[cfg(nightly)]
 use core::ops::Try;
+use core::usize;
 use {Bits, Ieee754};
 
 #[cfg(feature = "rayon")]
@@ -11,7 +11,7 @@ pub mod rayon;
 #[derive(Clone)]
 pub struct Iter<T: Ieee754> {
     neg: SingleSignIter<T, Negative>,
-    pos: SingleSignIter<T, Positive>
+    pos: SingleSignIter<T, Positive>,
 }
 /// Create an iterator over the floating point values in [from, to]
 /// (inclusive!)
@@ -34,12 +34,20 @@ pub fn new_iter<T: Ieee754>(from: T, to: T) -> Iter<T> {
         (false, true) => (neg_start, from_bits),
         (true, false) => (to_bits.prev(), pos_end),
         // impossible to have no negative and no positive values
-        (false, false) => unreachable!()
+        (false, false) => unreachable!(),
     };
 
     Iter {
-        neg: SingleSignIter { from: neg_start, to: neg_end, _sign: Negative },
-        pos: SingleSignIter { from: pos_start, to: pos_end, _sign: Positive },
+        neg: SingleSignIter {
+            from: neg_start,
+            to: neg_end,
+            _sign: Negative,
+        },
+        pos: SingleSignIter {
+            from: pos_start,
+            to: pos_end,
+            _sign: Positive,
+        },
     }
 }
 
@@ -56,7 +64,7 @@ fn u64_to_size_hint(x: u64) -> (usize, Option<usize>) {
 fn result_to_try<R: Try>(r: Result<R::Ok, R::Error>) -> R {
     match r {
         Ok(ok) => R::from_ok(ok),
-        Err(error) => R::from_error(error)
+        Err(error) => R::from_error(error),
     }
 }
 
@@ -65,18 +73,24 @@ impl<T: Ieee754> Iter<T> {
         self.neg.len() + self.pos.len()
     }
 
-    fn done(&self) -> bool { self.neg.done() && self.pos.done() }
+    fn done(&self) -> bool {
+        self.neg.done() && self.pos.done()
+    }
 
     /// A non-nightly only version of `Iterator::try_fold`.
     pub fn try_fold_result<B, F, E>(&mut self, init: B, mut f: F) -> Result<B, E>
-    where F: FnMut(B, T) -> Result<B, E> {
+    where
+        F: FnMut(B, T) -> Result<B, E>,
+    {
         let next = self.neg.try_fold_result(init, &mut f)?;
         self.pos.try_fold_result(next, f)
     }
 
     /// A non-nightly only version of `Iterator::try_fold`.
     pub fn try_rfold_result<B, F, E>(&mut self, init: B, mut f: F) -> Result<B, E>
-    where F: FnMut(B, T) -> Result<B, E> {
+    where
+        F: FnMut(B, T) -> Result<B, E>,
+    {
         let next = self.pos.try_rfold_result(init, &mut f)?;
         self.neg.try_fold_result(next, f)
     }
@@ -94,7 +108,8 @@ impl<T: Ieee754> Iterator for Iter<T> {
 
     // internal iteration optimisations:
     fn fold<B, F>(self, init: B, mut f: F) -> B
-    where F: FnMut(B, Self::Item) -> B
+    where
+        F: FnMut(B, Self::Item) -> B,
     {
         let next = self.neg.fold(init, &mut f);
         self.pos.fold(next, f)
@@ -102,8 +117,10 @@ impl<T: Ieee754> Iterator for Iter<T> {
 
     #[cfg(nightly)]
     fn try_fold<B, F, R>(&mut self, init: B, mut f: F) -> R
-    where F: FnMut(B, Self::Item) -> R,
-          R: Try<Ok = B> {
+    where
+        F: FnMut(B, Self::Item) -> R,
+        R: Try<Ok = B>,
+    {
         result_to_try(self.try_fold_result(init, |b, x| f(b, x).into_result()))
     }
 }
@@ -136,10 +153,9 @@ impl<T: Ieee754> fmt::Debug for Iter<T> {
             let (from, to) = match (iter.next(), iter.next_back()) {
                 (Some(f), Some(t)) => (f, t),
                 (Some(f), None) => (f, f),
-                _ => unreachable!()
+                _ => unreachable!(),
             };
-            dbg.field("from", &from)
-                .field("to", &to);
+            dbg.field("from", &from).field("to", &to);
         }
         dbg.finish()
     }
@@ -156,7 +172,6 @@ trait Sign {
     fn to_neg_inf<B: Bits>(x: B) -> B;
 
     fn dist<B: Bits>(from: B, to: B) -> u64;
-
 }
 #[derive(Clone, Eq, PartialEq, Debug)]
 struct Positive;
@@ -164,16 +179,24 @@ struct Positive;
 struct Negative;
 
 impl Sign for Positive {
-    fn to_pos_inf<B: Bits>(x: B) -> B { x.next() }
-    fn to_neg_inf<B: Bits>(x: B) -> B { x.prev() }
+    fn to_pos_inf<B: Bits>(x: B) -> B {
+        x.next()
+    }
+    fn to_neg_inf<B: Bits>(x: B) -> B {
+        x.prev()
+    }
 
     fn dist<B: Bits>(from: B, to: B) -> u64 {
         to.as_u64() - from.as_u64()
     }
 }
 impl Sign for Negative {
-    fn to_pos_inf<B: Bits>(x: B) -> B { x.prev() }
-    fn to_neg_inf<B: Bits>(x: B) -> B { x.next() }
+    fn to_pos_inf<B: Bits>(x: B) -> B {
+        x.prev()
+    }
+    fn to_neg_inf<B: Bits>(x: B) -> B {
+        x.next()
+    }
 
     fn dist<B: Bits>(from: B, to: B) -> u64 {
         // sign-magnitude has the order reversed when negative
@@ -198,7 +221,9 @@ impl<T: Ieee754, S: Sign> SingleSignIter<T, S> {
     }
 
     fn try_fold_result<B, F, E>(&mut self, mut value: B, mut f: F) -> Result<B, E>
-    where F: FnMut(B, T) -> Result<B, E> {
+    where
+        F: FnMut(B, T) -> Result<B, E>,
+    {
         let SingleSignIter { mut from, to, .. } = *self;
         while from != to {
             let this = T::from_bits(from);
@@ -214,7 +239,9 @@ impl<T: Ieee754, S: Sign> SingleSignIter<T, S> {
     }
 
     fn try_rfold_result<B, F, E>(&mut self, mut value: B, mut f: F) -> Result<B, E>
-    where F: FnMut(B, T) -> Result<B, E> {
+    where
+        F: FnMut(B, T) -> Result<B, E>,
+    {
         let SingleSignIter { from, mut to, .. } = *self;
         while from != to {
             to = S::to_neg_inf(to);
@@ -254,14 +281,16 @@ impl<T: Ieee754, S: Sign> Iterator for SingleSignIter<T, S> {
 
         match self.try_fold_result(init, |b, x| Ok::<_, Void>(f(b, x))) {
             Ok(result) => result,
-            Err(_) => unreachable!()
+            Err(_) => unreachable!(),
         }
     }
 
     #[cfg(nightly)]
     fn try_fold<B, F, R>(&mut self, init: B, mut f: F) -> R
-    where F: FnMut(B, Self::Item) -> R,
-          R: Try<Ok = B> {
+    where
+        F: FnMut(B, Self::Item) -> R,
+        R: Try<Ok = B>,
+    {
         result_to_try(self.try_fold_result(init, |b, x| f(b, x).into_result()))
     }
 }
@@ -278,8 +307,10 @@ impl<T: Ieee754, S: Sign> DoubleEndedIterator for SingleSignIter<T, S> {
 
     #[cfg(nightly)]
     fn try_rfold<B, F, R>(&mut self, init: B, mut f: F) -> R
-    where F: FnMut(B, Self::Item) -> R,
-          R: Try<Ok = B> {
+    where
+        F: FnMut(B, Self::Item) -> R,
+        R: Try<Ok = B>,
+    {
         result_to_try(self.try_fold_result(init, |b, x| f(b, x).into_result()))
     }
 }

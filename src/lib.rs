@@ -48,14 +48,16 @@
 
 #![no_std]
 #![cfg_attr(nightly, feature(try_trait))]
-#[cfg(test)] #[macro_use] extern crate std;
+#[cfg(test)]
+#[macro_use]
+extern crate std;
 
-mod iter;
 mod impls;
+mod iter;
 mod traits;
 
-pub use traits::{Bits, Ieee754};
 pub use iter::Iter;
+pub use traits::{Bits, Ieee754};
 
 #[cfg(feature = "rayon")]
 pub use iter::rayon::ParIter;

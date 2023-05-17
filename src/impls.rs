@@ -1,6 +1,6 @@
-use core::mem;
 use core::cmp::Ordering;
-use {Iter, Ieee754};
+use core::mem;
+use {Ieee754, Iter};
 
 macro_rules! mask{
     ($bits: expr; $current: expr => $($other: expr),*) => {

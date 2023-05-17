@@ -17,7 +17,9 @@ pub trait Bits: Eq + PartialEq + PartialOrd + Ord + Copy + Send + Sync {
 }
 impl Bits for u32 {
     #[inline]
-    fn as_u64(self) -> u64 { self as u64 }
+    fn as_u64(self) -> u64 {
+        self as u64
+    }
 
     #[inline]
     fn zero() -> Self {
@@ -34,9 +36,13 @@ impl Bits for u32 {
     }
 
     #[inline]
-    fn next(self) -> Self { self + 1 }
+    fn next(self) -> Self {
+        self + 1
+    }
     #[inline]
-    fn prev(self) -> Self { self - 1 }
+    fn prev(self) -> Self {
+        self - 1
+    }
 
     #[inline]
     fn offset(self, offset: i64) -> Self {
@@ -46,7 +52,9 @@ impl Bits for u32 {
 }
 impl Bits for u64 {
     #[inline]
-    fn as_u64(self) -> u64 { self }
+    fn as_u64(self) -> u64 {
+        self
+    }
 
     #[inline]
     fn zero() -> Self {
@@ -63,9 +71,13 @@ impl Bits for u64 {
     }
 
     #[inline]
-    fn next(self) -> Self { self + 1 }
+    fn next(self) -> Self {
+        self + 1
+    }
     #[inline]
-    fn prev(self) -> Self { self - 1 }
+    fn prev(self) -> Self {
+        self - 1
+    }
 
     #[inline]
     fn offset(self, offset: i64) -> Self {
