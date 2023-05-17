@@ -1,6 +1,5 @@
 use crate::{Ieee754, Iter};
 use core::cmp::Ordering;
-use core::mem;
 
 macro_rules! mask{
     ($bits: expr; $current: expr => $($other: expr),*) => {
@@ -90,11 +89,11 @@ macro_rules! mk_impl {
 
             #[inline]
             fn bits(self) -> Self::Bits {
-                unsafe {mem::transmute(self)}
+                self.to_bits()
             }
             #[inline]
             fn from_bits(bits: Self::Bits) -> Self {
-                unsafe {mem::transmute(bits)}
+                $f::from_bits(bits)
             }
             #[inline]
             fn decompose_raw(self) -> (bool, Self::RawExponent, Self::Significand) {
