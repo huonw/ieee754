@@ -1,8 +1,8 @@
+use crate::{Bits, Ieee754};
 use core::fmt;
 #[cfg(nightly)]
 use core::ops::Try;
 use core::usize;
-use {Bits, Ieee754};
 
 #[cfg(feature = "rayon")]
 pub mod rayon;

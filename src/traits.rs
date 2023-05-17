@@ -1,7 +1,7 @@
+use crate::Iter;
 use core::cmp::Ordering;
 use core::fmt;
 use core::i32;
-use Iter;
 
 pub trait Bits: Eq + PartialEq + PartialOrd + Ord + Copy + Send + Sync {
     fn as_u64(self) -> u64;

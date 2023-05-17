@@ -1,6 +1,6 @@
+use crate::{Ieee754, Iter};
 use core::cmp::Ordering;
 use core::mem;
-use {Ieee754, Iter};
 
 macro_rules! mask{
     ($bits: expr; $current: expr => $($other: expr),*) => {
@@ -31,7 +31,7 @@ macro_rules! mk_impl {
                 #[inline(always)]
                 fn canon(x: $f) -> $f { if x == 0.0 { 0.0 } else { x } }
 
-                ::iter::new_iter(canon(self), canon(lim))
+                crate::iter::new_iter(canon(self), canon(lim))
             }
             #[inline]
             fn ulp(self) -> Option<Self> {
@@ -189,7 +189,7 @@ macro_rules! mk_impl {
             use std::prelude::v1::*;
             use std::{$f, usize};
 
-            use {Ieee754, Iter};
+            use crate::{Ieee754, Iter};
 
             // test both `next`, and any potential internal-iteration
             // optimisations that the iterators support (which will
