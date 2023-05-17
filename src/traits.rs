@@ -1,7 +1,6 @@
 use crate::Iter;
 use core::cmp::Ordering;
 use core::fmt;
-use core::i32;
 
 pub trait Bits: Eq + PartialEq + PartialOrd + Ord + Copy + Send + Sync {
     fn as_u64(self) -> u64;
@@ -14,6 +13,76 @@ pub trait Bits: Eq + PartialEq + PartialOrd + Ord + Copy + Send + Sync {
     fn prev(self) -> Self;
 
     fn offset(self, offset: i64) -> Self;
+}
+impl Bits for u8 {
+    #[inline]
+    fn as_u64(self) -> u64 {
+        self as u64
+    }
+
+    #[inline]
+    fn zero() -> Self {
+        0
+    }
+    #[inline]
+    fn imin() -> Self {
+        1 << 7
+    }
+
+    #[inline]
+    fn high(self) -> bool {
+        self & (1 << 7) != 0
+    }
+
+    #[inline]
+    fn next(self) -> Self {
+        self + 1
+    }
+    #[inline]
+    fn prev(self) -> Self {
+        self - 1
+    }
+
+    #[inline]
+    fn offset(self, offset: i64) -> Self {
+        debug_assert!(i8::MIN as i64 <= offset && offset <= i8::MAX as i64);
+        self.wrapping_add(offset as u8)
+    }
+}
+impl Bits for u16 {
+    #[inline]
+    fn as_u64(self) -> u64 {
+        self as u64
+    }
+
+    #[inline]
+    fn zero() -> Self {
+        0
+    }
+    #[inline]
+    fn imin() -> Self {
+        1 << 15
+    }
+
+    #[inline]
+    fn high(self) -> bool {
+        self & (1 << 15) != 0
+    }
+
+    #[inline]
+    fn next(self) -> Self {
+        self + 1
+    }
+    #[inline]
+    fn prev(self) -> Self {
+        self - 1
+    }
+
+    #[inline]
+    fn offset(self, offset: i64) -> Self {
+        debug_assert!(i16::MIN as i64 <= offset && offset <= i16::MAX as i64);
+        self.wrapping_add(offset as u16)
+    }
 }
 impl Bits for u32 {
     #[inline]
