@@ -1,6 +1,7 @@
 [package]
 name = "ieee754"
 version = "0.2.6"
+edition = "2021"
 authors = ["Huon Wilson <dbau.pp@gmail.com>"]
 
 homepage = "https://github.com/huonw/ieee754"

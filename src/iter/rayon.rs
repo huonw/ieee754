@@ -1,14 +1,14 @@
 extern crate rayon;
 
-use {Ieee754, Bits};
-use super::{Iter, SingleSignIter};
-use self::rayon::iter::*;
 use self::rayon::iter::plumbing::*;
+use self::rayon::iter::*;
+use super::{Iter, SingleSignIter};
+use {Bits, Ieee754};
 
 /// A parallel iterator over floating point numbers, created by
 /// `into_par_iter` on `Iter`.
 pub struct ParIter<T: Ieee754> {
-    range: Iter<T>
+    range: Iter<T>,
 }
 
 struct IterProducer<T: Ieee754> {
@@ -53,27 +53,43 @@ impl<T: Ieee754> IterProducer<T> {
         let (left, right) = if position < neg.len() {
             // the split happens within the negative range
             let mid = neg.from.offset(-(position as i64));
-            (Iter {
-                neg: SingleSignIter { to: mid, .. neg.clone() },
-                // the positive range is empty
-                pos: SingleSignIter { to: pos.from, .. pos.clone() },
-            },
-             Iter {
-                 neg: SingleSignIter { from: mid, .. neg },
-                 pos: pos
-             })
+            (
+                Iter {
+                    neg: SingleSignIter {
+                        to: mid,
+                        ..neg.clone()
+                    },
+                    // the positive range is empty
+                    pos: SingleSignIter {
+                        to: pos.from,
+                        ..pos.clone()
+                    },
+                },
+                Iter {
+                    neg: SingleSignIter { from: mid, ..neg },
+                    pos: pos,
+                },
+            )
         } else {
             // the split happens within the positive range (or at the boundary)
             let mid = pos.from.offset((position - neg.len()) as i64);
-            (Iter {
-                neg: neg.clone(),
-                pos: SingleSignIter { to: mid, .. pos.clone() },
-            },
-             Iter {
-                 // the negative range is empty
-                 neg: SingleSignIter { from: neg.to, .. neg },
-                 pos: SingleSignIter { from: mid, .. pos }
-             })
+            (
+                Iter {
+                    neg: neg.clone(),
+                    pos: SingleSignIter {
+                        to: mid,
+                        ..pos.clone()
+                    },
+                },
+                Iter {
+                    // the negative range is empty
+                    neg: SingleSignIter {
+                        from: neg.to,
+                        ..neg
+                    },
+                    pos: SingleSignIter { from: mid, ..pos },
+                },
+            )
         };
         // the ranges should be exactly touching, i.e. last of left is
         // immediately before first of right
@@ -100,7 +116,9 @@ impl<T: Ieee754> UnindexedProducer for IterProducer<T> {
     }
 
     fn fold_with<F>(self, neg_folder: F) -> F
-    where F: Folder<Self::Item> {
+    where
+        F: Folder<Self::Item>,
+    {
         // consume the two signs separately, to minimise branching
         let Iter { neg, pos } = self.range;
 
@@ -214,7 +232,10 @@ mod tests {
         split_test(-1.0, f64::INFINITY, 1.4916681462400413e-154);
     }
     fn split_fail_test<T: Ieee754>(range: Iter<T>) {
-        let (left, right) = IterProducer { range: range.clone() }.split();
+        let (left, right) = IterProducer {
+            range: range.clone(),
+        }
+        .split();
         assert_eq!(left.range, range);
         assert!(right.is_none());
     }
@@ -252,12 +273,17 @@ mod tests {
         fn t<T: Ieee754>(from: T, to: T) {
             // the elements yielded by the parallel iterate should be
             // the same as the non-parallel ones
-            let mut parallel = from.upto(to).into_par_iter()
-                .fold_with(
-                    vec![],
-                    |mut v, item| { v.push(item); v }
-                )
-                .reduce_with(|mut x, mut y| { x.append(&mut y); x })
+            let mut parallel = from
+                .upto(to)
+                .into_par_iter()
+                .fold_with(vec![], |mut v, item| {
+                    v.push(item);
+                    v
+                })
+                .reduce_with(|mut x, mut y| {
+                    x.append(&mut y);
+                    x
+                })
                 .unwrap();
 
             parallel.sort_by(|x, y| x.partial_cmp(&y).unwrap());
